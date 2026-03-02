@@ -29,9 +29,7 @@ pydantic==2.11.5
 pydantic_core==2.33.2
 pyee==13.0.0
 pyperclip==1.9.0
-PyQt5==5.15.11
-PyQt5-Qt5==5.15.17
-PyQt5-sip==12.17.0
+PySide6>=6.6.0
 python-dotenv==1.1.0
 regex==2024.11.6
 requests==2.32.3

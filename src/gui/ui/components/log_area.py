@@ -2,8 +2,8 @@
 로그 영역 컴포넌트
 """
 
-from PyQt5.QtWidgets import QTextEdit, QVBoxLayout, QLabel
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QLabel
+from PySide6.QtCore import Qt
 
 from src.gui.config.styles import StyleSheet
 from src.gui.config.constants import Limits

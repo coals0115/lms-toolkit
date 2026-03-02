@@ -2,8 +2,7 @@
 버튼 컴포넌트들
 """
 
-from PyQt5.QtWidgets import QPushButton
-from PyQt5.QtCore import pyqtSignal
+from PySide6.QtWidgets import QPushButton
 
 from src.gui.config.styles import StyleSheet
 from src.gui.config.constants import EMOJI_START, EMOJI_PROCESSING

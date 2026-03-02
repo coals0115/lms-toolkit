@@ -2,8 +2,8 @@
 재사용 가능한 입력 필드 컴포넌트
 """
 
-from PyQt5.QtWidgets import QLabel, QLineEdit, QTextEdit
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QLineEdit, QTextEdit
+from PySide6.QtCore import Qt
 
 from src.gui.config.settings import InputFieldConfig
 from src.gui.config.styles import StyleSheet
@@ -37,7 +37,7 @@ class InputField:
         widget.setStyleSheet(StyleSheet.input_field())
 
         if self.config.is_password:
-            widget.setEchoMode(QLineEdit.Password)
+            widget.setEchoMode(QLineEdit.EchoMode.Password)
 
         return widget
 

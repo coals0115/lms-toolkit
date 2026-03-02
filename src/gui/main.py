@@ -22,8 +22,8 @@ def setup_import_path():
 # import 경로 설정
 setup_import_path()
 
-from PyQt5.QtWidgets import QApplication, QMessageBox
-from PyQt5.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtGui import QFont
 
 from src.gui.config.constants import APP_TITLE, APP_VERSION
 from src.gui.core.module_loader import load_required_modules, setup_python_path
@@ -69,7 +69,7 @@ def main():
         window = MainWindow(modules, errors)
         window.show()
 
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
 
     except Exception as e:
         QMessageBox.critical(

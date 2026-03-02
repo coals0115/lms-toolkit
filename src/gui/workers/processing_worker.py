@@ -5,7 +5,7 @@
 import traceback
 from pathlib import Path
 from typing import Dict, List
-from PyQt5.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from src.gui.config.constants import Messages
 from src.gui.core.file_manager import create_config_files, extract_urls_from_input
@@ -16,8 +16,8 @@ class ProcessingWorker(QThread):
     """백그라운드에서 LMS 처리 작업을 수행하는 워커 스레드"""
 
     # 시그널 정의
-    log_message = pyqtSignal(str)
-    processing_finished = pyqtSignal(bool, str)
+    log_message = Signal(str)
+    processing_finished = Signal(bool, str)
 
     def __init__(self, user_inputs: Dict[str, str], modules: Dict):
         super().__init__()

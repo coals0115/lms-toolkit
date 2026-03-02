@@ -3,11 +3,11 @@
 """
 
 from typing import Dict, List
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QMessageBox,
     QFileDialog, QPushButton
 )
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
 
 from src.gui.config.constants import APP_TITLE, APP_VERSION, WINDOW_WIDTH, WINDOW_HEIGHT, Messages
 from src.gui.config.styles import StyleSheet
@@ -119,7 +119,7 @@ class MainWindow(QWidget):
             self,
             "저장 경로 선택",
             current_path,
-            QFileDialog.ShowDirsOnly
+            QFileDialog.Option.ShowDirsOnly
         )
         
         if new_path:
@@ -193,11 +193,11 @@ class MainWindow(QWidget):
         reply = QMessageBox.question(
             self, "확인",
             "모든 입력 필드를 초기화하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
 
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             for field in self.input_fields.values():
                 field.clear()
             self.log_area.clear()
@@ -284,11 +284,11 @@ class MainWindow(QWidget):
             reply = QMessageBox.question(
                 self, "확인",
                 "작업이 진행 중입니다. 정말 종료하시겠습니까?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
             )
 
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 self.worker.terminate()
                 self.worker.wait()
                 event.accept()

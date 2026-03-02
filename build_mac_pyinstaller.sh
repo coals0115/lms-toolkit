@@ -54,10 +54,10 @@ pyinstaller \
     --paths="src/video_pipeline" \
     --paths="src/audio_pipeline" \
     --paths="src/summarize_pipeline" \
-    --hidden-import=PyQt5 \
-    --hidden-import=PyQt5.QtCore \
-    --hidden-import=PyQt5.QtWidgets \
-    --hidden-import=PyQt5.QtGui \
+    --hidden-import=PySide6 \
+    --hidden-import=PySide6.QtCore \
+    --hidden-import=PySide6.QtWidgets \
+    --hidden-import=PySide6.QtGui \
     --hidden-import=openai \
     --hidden-import=whisper \
     --hidden-import=playwright \
