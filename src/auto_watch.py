@@ -412,6 +412,7 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
     # 2. mp4 → wav → txt
     try:
         def _transcribe():
+            import time
             from src.audio_pipeline.converter import convert_mp4_to_wav
             from src.audio_pipeline.transcriber import WhisperTranscriber
 
@@ -424,7 +425,11 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
             transcriber = WhisperTranscriber()
 
             print(f"  ├ 스크립트: [3/3] 음성 → 텍스트 전사 중...")
+            t_start = time.time()
             transcriber.transcribe(str(wav_path), str(txt_path))
+            elapsed = time.time() - t_start
+            em, es = divmod(int(elapsed), 60)
+            print(f"  ├ 스크립트: 전사 완료 ({em}분 {es}초)")
 
             wav_path.unlink(missing_ok=True)
             return str(txt_path)

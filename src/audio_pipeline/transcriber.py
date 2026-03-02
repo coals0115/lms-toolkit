@@ -49,7 +49,21 @@ class WhisperTranscriber(Transcriber):
     def transcribe(self, wav_path: str, txt_path: str):
         try:
             segments, info = self.model.transcribe(wav_path, language="ko", beam_size=5)
-            text = "".join(segment.text for segment in segments)
+            duration = info.duration  # 전체 오디오 길이(초)
+
+            texts = []
+            last_report = 0
+            for segment in segments:
+                texts.append(segment.text)
+                # 60초마다 진행상황 표시
+                if duration and segment.end - last_report >= 60:
+                    pct = segment.end / duration * 100
+                    seg_m, seg_s = divmod(int(segment.end), 60)
+                    dur_m, dur_s = divmod(int(duration), 60)
+                    print(f"  ├ 스크립트: 전사 {seg_m}:{seg_s:02d}/{dur_m}:{dur_s:02d} ({pct:.0f}%)")
+                    last_report = segment.end
+
+            text = "".join(texts)
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(text)
             print(f"[Whisper] 변환 완료: {txt_path}")
