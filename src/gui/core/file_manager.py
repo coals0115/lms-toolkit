@@ -7,6 +7,7 @@ import os
 import json
 from typing import Dict, List
 from pathlib import Path
+from datetime import datetime
 
 
 def get_app_data_dir() -> str:
@@ -127,13 +128,21 @@ def extract_urls_from_input(url_input: str) -> List[str]:
 
 
 def get_downloads_dir() -> str:
-    """다운로드 디렉토리 경로 반환"""
+    """다운로드 디렉토리 경로 반환 (날짜별 하위 폴더 포함)"""
     if getattr(sys, 'frozen', False):
         # .app 번들인 경우 사용자의 Downloads 폴더 사용
-        downloads = os.path.expanduser('~/Downloads/LMS-Summarizer')
+        base_downloads = os.path.expanduser('~/Downloads/LMS-Summarizer')
     else:
         # 개발 환경인 경우 현재 디렉토리의 downloads 폴더 사용
-        downloads = 'downloads'
+        base_downloads = 'downloads'
 
-    Path(downloads).mkdir(parents=True, exist_ok=True)
-    return downloads
+    # 오늘 날짜를 YYMMDD 형식으로 포맷 (예: 251101)
+    date_folder = datetime.now().strftime('%y%m%d')
+
+    # 날짜별 하위 폴더 경로 생성
+    downloads_with_date = os.path.join(base_downloads, date_folder)
+
+    # 디렉토리 생성 (부모 디렉토리 포함)
+    Path(downloads_with_date).mkdir(parents=True, exist_ok=True)
+
+    return downloads_with_date

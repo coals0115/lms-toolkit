@@ -14,10 +14,12 @@ async def on_request(event, shared_state: dict):
 
 
 async def register_cdp_video_sniffer(page: Page, shared_state: dict):
+    """CDP 세션을 생성하고 네트워크 요청을 감시. CDP 클라이언트를 반환하여 나중에 정리할 수 있도록 함."""
     client = await page.context.new_cdp_session(page)
     await client.send("Network.enable")
     client.on("Network.requestWillBeSent",
               lambda e: asyncio.create_task(on_request(e, shared_state)))
+    return client  # CDP 클라이언트 반환
 
 
 async def find_canvas_video_frame(page: Page, shared_state: dict):
@@ -62,20 +64,29 @@ async def trigger_video_play(frame):
 
 async def extract_video_url(page: Page) -> tuple[str, str]:
     shared_state = {"video_url": None, "title": None}
-    await register_cdp_video_sniffer(page, shared_state)
+    cdp_client = await register_cdp_video_sniffer(page, shared_state)
 
-    video_frame = await find_canvas_video_frame(page, shared_state)
-    if not video_frame:
+    try:
+        video_frame = await find_canvas_video_frame(page, shared_state)
+        if not video_frame:
+            return None, None
+
+        await trigger_video_play(video_frame)
+
+        print("[DEBUG] 비디오 URL 대기 시작")
+        for _ in range(100):  # 최대 10초 대기 (0.1초 간격)
+            if shared_state["video_url"]:
+                print(f"[DEBUG] 비디오 URL 찾음: {shared_state['video_url']}")
+                return shared_state["video_url"], shared_state["title"]
+            await asyncio.sleep(0.1)
+
+        print("[DEBUG] 비디오 URL을 찾지 못했습니다.")
         return None, None
-
-    await trigger_video_play(video_frame)
-
-    print("[DEBUG] 비디오 URL 대기 시작")
-    for _ in range(100):  # 최대 10초 대기 (0.1초 간격)
-        if shared_state["video_url"]:
-            print(f"[DEBUG] 비디오 URL 찾음: {shared_state['video_url']}")
-            return shared_state["video_url"], shared_state["title"]
-        await asyncio.sleep(0.1)
-
-    print("[DEBUG] 비디오 URL을 찾지 못했습니다.")
-    return None, None
+    finally:
+        # CDP 세션 정리 - 네트워크 모니터링 비활성화
+        try:
+            await cdp_client.send("Network.disable")
+            await cdp_client.detach()
+            print("[DEBUG] CDP 세션 정리 완료")
+        except Exception as e:
+            print(f"[WARN] CDP 세션 정리 중 오류 (무시): {e}")

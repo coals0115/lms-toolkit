@@ -45,7 +45,7 @@ class WhisperTranscriber(Transcriber):
 
     def transcribe(self, wav_path: str, txt_path: str):
         try:
-            result = self.model.transcribe(wav_path)
+            result = self.model.transcribe(wav_path, language="ko")
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(result["text"])
             print("[Whisper] 변환 완료:", txt_path)
