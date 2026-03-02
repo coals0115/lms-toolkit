@@ -1,6 +1,6 @@
 import json
 import time
-import whisper
+from faster_whisper import WhisperModel
 from abc import ABC, abstractmethod
 import os
 import requests
@@ -27,28 +27,33 @@ class Transcriber(ABC):
 
 
 class WhisperTranscriber(Transcriber):
-    def __init__(self, model_name="base"):
+    def __init__(self, model_name="turbo"):
         import sys
         import os
+
+        device = "cpu"
+        compute_type = "int8"
 
         # .app 번들 내부의 모델 확인
         if getattr(sys, 'frozen', False):
             model_path = os.path.join(sys._MEIPASS, 'whisper_models', model_name)
             if os.path.exists(model_path):
                 print(f"[INFO] 번들된 Whisper 모델 사용: {model_path}")
-                self.model = whisper.load_model(model_path)
+                self.model = WhisperModel(model_path, device=device, compute_type=compute_type)
                 return
 
-        # 기본 경로에서 모델 로드
-        print(f"[INFO] Whisper 모델 다운로드 중: {model_name}")
-        self.model = whisper.load_model(model_name)
+        # 기본 경로에서 모델 로드 (첫 실행 시 자동 다운로드)
+        print(f"[INFO] faster-whisper 모델 로드 중: {model_name}")
+        self.model = WhisperModel(model_name, device=device, compute_type=compute_type)
 
     def transcribe(self, wav_path: str, txt_path: str):
         try:
-            result = self.model.transcribe(wav_path, language="ko")
+            segments, info = self.model.transcribe(wav_path, language="ko", beam_size=5)
+            text = "".join(segment.text for segment in segments)
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(result["text"])
-            print("[Whisper] 변환 완료:", txt_path)
+                f.write(text)
+            print(f"[Whisper] 변환 완료: {txt_path}")
+            print(f"[Whisper] 감지된 언어: {info.language} (확률: {info.language_probability:.2f})")
         except Exception as e:
             print(f"[ERROR] 변환 실패: {e}")
             raise e

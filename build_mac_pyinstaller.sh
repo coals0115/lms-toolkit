@@ -36,8 +36,8 @@ else
     exit 1
 fi
 
-echo "📦 Whisper 모델 다운로드 중..."
-python3 -c "import whisper; whisper.load_model('base')"
+echo "📦 faster-whisper 모델 다운로드 중..."
+python3 -c "from faster_whisper import WhisperModel; WhisperModel('turbo', device='cpu', compute_type='int8')"
 
 echo "🔨 .app 번들을 빌드합니다..."
 
@@ -49,7 +49,7 @@ pyinstaller \
     --add-data="src:src" \
     --add-data="requirements.txt:." \
     --add-binary="${FFMPEG_PATH}:." \
-    --add-data="$HOME/.cache/whisper:whisper_models" \
+    --add-data="$HOME/.cache/huggingface/hub/models--Systran--faster-whisper-turbo:whisper_models/turbo" \
     --paths="src" \
     --paths="src/video_pipeline" \
     --paths="src/audio_pipeline" \
@@ -59,7 +59,7 @@ pyinstaller \
     --hidden-import=PySide6.QtWidgets \
     --hidden-import=PySide6.QtGui \
     --hidden-import=openai \
-    --hidden-import=whisper \
+    --hidden-import=faster_whisper \
     --hidden-import=playwright \
     --hidden-import=requests \
     --hidden-import=dotenv \
@@ -75,9 +75,8 @@ pyinstaller \
     --hidden-import=src.audio_pipeline.converter \
     --hidden-import=src.audio_pipeline.transcriber \
     --hidden-import=src.summarize_pipeline.summarizer \
-    --collect-all=whisper \
-    --collect-all=torch \
-    --collect-all=torchaudio \
+    --collect-all=faster_whisper \
+    --collect-all=ctranslate2 \
     --collect-all=openai \
     --collect-submodules=src \
     --exclude-module=tkinter \
