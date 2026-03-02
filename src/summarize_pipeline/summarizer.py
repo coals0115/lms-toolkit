@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-import google.generativeai as genai
+from google import genai
 import webbrowser
 from openai import OpenAI
 import pyperclip
@@ -74,11 +74,10 @@ class OpenAISummarizer(Summarizer):
 
 
 class GeminiSummarizer(Summarizer):
-    def __init__(self, model_name: str = "gemini-1.5-flash"):
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
         user_setting = UserSetting()
         self.model_name = model_name
-        genai.configure(api_key=user_setting.GOOGLE_API_KEY)
-        self.model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=user_setting.GOOGLE_API_KEY)
 
     def summarize(self, txt_path: str, prompt: str) -> str:
         print(f"[DEBUG] 텍스트 파일 읽는 중: {txt_path}")
@@ -87,16 +86,14 @@ class GeminiSummarizer(Summarizer):
 
         print(f"[DEBUG] 텍스트 길이: {len(content)}자")
 
-        # 텍스트가 너무 길면 자르기 (Gemini 토큰 제한 고려)
-        if len(content) > 8000:
-            print(f"[WARNING] 텍스트가 너무 깁니다 ({len(content)}자). 8000자로 제한합니다.")
-            content = content[:8000] + "..."
-
         full_prompt = f"{prompt}\n\n다음은 전체 텍스트입니다:\n{content}"
 
         print("[DEBUG] Google Gemini API 호출 시작...")
         try:
-            response = self.model.generate_content(full_prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=full_prompt,
+            )
             print("[DEBUG] Google Gemini API 응답 받음")
 
             summary = response.text
@@ -106,7 +103,6 @@ class GeminiSummarizer(Summarizer):
         except Exception as e:
             print(f"[ERROR] Google Gemini API 호출 실패: {e}")
             print(f"[ERROR] 오류 타입: {type(e).__name__}")
-            # 오류 발생 시 기본 메시지 반환
             return f"요약 생성 실패: {str(e)}"
 
 

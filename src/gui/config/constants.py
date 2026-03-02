@@ -85,7 +85,6 @@ class FileExtensions:
 @dataclass(frozen=True)
 class Limits:
     """제한값들"""
-    MAX_TEXT_LENGTH = 8000
     LOG_AREA_MAX_HEIGHT = 300
     URL_INPUT_MAX_HEIGHT = 120
     MIN_INPUT_WIDTH = 500
