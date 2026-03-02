@@ -4,11 +4,11 @@
 
 ## 프로젝트 개요
 
-LMS Summarizer는 성신여대 LMS(Canvas)에서 동영상 강의를 자동으로 다운로드하고, OpenAI Whisper를 사용해 텍스트로 변환한 후, Google Gemini API를 사용해 요약을 생성하는 PyQt5 기반 GUI 애플리케이션입니다. PyInstaller를 사용해 독립 실행 가능한 Mac .app으로 패키징할 수 있습니다.
+LMS Summarizer는 성신여대 LMS(Canvas)에서 동영상 강의를 자동으로 다운로드하고, faster-whisper를 사용해 텍스트로 변환한 후, Google Gemini API(google-genai SDK)를 사용해 요약을 생성하는 PySide6 기반 GUI 애플리케이션입니다. PyInstaller를 사용해 독립 실행 가능한 Mac .app으로 패키징할 수 있습니다.
 
 ## Python 환경 설정
 
-**중요**: 이 프로젝트는 openai-whisper 호환성 때문에 Python 3.9.9가 필요합니다. Python 3.13 이상에서는 의존성 설치가 실패합니다.
+**중요**: 이 프로젝트는 Python 3.11 이상이 필요합니다. faster-whisper(CTranslate2)와 PySide6(Qt6)를 사용합니다.
 
 ### 환경 설정 명령어
 
@@ -128,7 +128,7 @@ Python은 엄격한 프로젝트 루트 개념이 없어서, `src/`에서의 상
 - **목적**: 동영상을 텍스트 전사로 변환
 - **주요 구성요소**:
   - `converter.py`: ffmpeg를 사용해 MP4를 WAV로 변환 (16kHz 샘플레이트)
-  - `transcriber.py`: OpenAI Whisper (base 모델)를 사용한 음성-텍스트 변환
+  - `transcriber.py`: faster-whisper (turbo 모델, int8 양자화)를 사용한 음성-텍스트 변환
   - `pipeline.py`: 변환 → 전사 워크플로우 관리
 - **출력**: 전사된 강의 내용이 담긴 TXT 파일
 
@@ -141,7 +141,7 @@ Python은 엄격한 프로젝트 루트 개념이 없어서, `src/`에서의 상
 
 ### GUI 아키텍처 (`src/gui/`)
 
-관심사가 명확히 분리된 PyQt5 기반 모듈형 GUI:
+관심사가 명확히 분리된 PySide6(Qt6) 기반 모듈형 GUI:
 
 - **`config/`**: 애플리케이션 상수 및 설정
 - **`core/`**: 비즈니스 로직 (검증자, 파일 관리, 모듈 로딩)
@@ -173,13 +173,15 @@ Python은 엄격한 프로젝트 루트 개념이 없어서, `src/`에서의 상
 
 ## 외부 서비스 의존성
 
-### OpenAI Whisper
-- **모델**: `base` (기본값, 첫 실행 시 자동 다운로드)
-- **위치**: `~/.cache/whisper/`
+### faster-whisper
+- **모델**: `turbo` (= large-v3-turbo, 첫 실행 시 HuggingFace Hub에서 자동 다운로드)
+- **위치**: `~/.cache/huggingface/hub/`
+- **설정**: `device="cpu"`, `compute_type="int8"` (CPU int8 양자화)
 - **참고**: PyInstaller 빌드 시 `--add-data` 플래그로 번들링됨
 
 ### Google Gemini API
-- **목적**: 한국어 지원 텍스트 요약
+- **SDK**: `google-genai` (신규 통합 SDK, `google-generativeai`는 EOL)
+- **모델**: `gemini-2.5-flash` (1M 토큰 컨텍스트)
 - **설정**: .env에 `GOOGLE_API_KEY` 필요
 
 ### Playwright
@@ -193,9 +195,9 @@ Python은 엄격한 프로젝트 루트 개념이 없어서, `src/`에서의 상
 **문제**: `ModuleNotFoundError: No module named 'audio_pipeline'`
 **해결**: 테스트가 `src/`에서 상대 임포트를 사용합니다. 테스트 실행 전 PYTHONPATH에 src 디렉토리를 포함시키세요.
 
-### Whisper 설치 실패
-**문제**: openai-whisper를 설치할 수 없음
-**해결**: Python 3.13 이상은 호환되지 않습니다. pyenv를 통해 Python 3.9.9를 사용하세요.
+### faster-whisper 모델 다운로드 실패
+**문제**: 모델 다운로드가 느리거나 실패
+**해결**: HuggingFace Hub에서 turbo 모델(~1.5GB)을 다운로드합니다. 네트워크 연결을 확인하세요.
 
 ### Playwright 브라우저를 찾을 수 없음
 **문제**: 브라우저 실행 파일을 찾을 수 없음
