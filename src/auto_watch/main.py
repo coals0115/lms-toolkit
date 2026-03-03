@@ -6,11 +6,11 @@ from datetime import datetime
 
 from playwright.async_api import async_playwright
 
-from src.auto_watch.config import USERID, PASSWORD
-from src.auto_watch.browser import setup_browser
-from src.auto_watch.courses import get_unwatched_courses, get_unwatched_lectures
-from src.auto_watch.player import watch_lecture
-from src.auto_watch.cli import select_lectures
+from .config import USERID, PASSWORD
+from .browser import setup_browser
+from .courses import get_unwatched_courses, get_unwatched_lectures
+from .player import watch_lecture
+from .cli import select_lectures
 
 
 async def main():

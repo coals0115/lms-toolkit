@@ -5,7 +5,7 @@ import sys
 
 from playwright.async_api import Page, Frame
 
-from src.auto_watch.config import USERID, PASSWORD
+from .config import USERID, PASSWORD
 
 
 async def setup_browser(playwright):

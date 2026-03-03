@@ -4,8 +4,8 @@ import asyncio
 
 from playwright.async_api import Page
 
-from src.auto_watch.config import BASE_URL, MYPAGE_URL
-from src.auto_watch.browser import login_if_needed, get_tool_content_frame
+from .config import BASE_URL, MYPAGE_URL
+from .browser import login_if_needed, get_tool_content_frame
 
 
 async def get_unwatched_courses(page: Page) -> list[dict]:

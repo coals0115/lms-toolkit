@@ -7,9 +7,9 @@ from datetime import datetime
 
 from playwright.async_api import Page, Frame, Request
 
-from src.auto_watch.browser import get_tool_content_frame
-from src.auto_watch.cli import _is_target_video_url
-from src.auto_watch.transcription import download_and_transcribe
+from .browser import get_tool_content_frame
+from .cli import _is_target_video_url
+from .transcription import download_and_transcribe
 
 
 def find_commons_frame(page: Page) -> Frame | None:

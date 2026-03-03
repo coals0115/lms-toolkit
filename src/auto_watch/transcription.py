@@ -5,13 +5,13 @@ import traceback
 
 import requests as req_lib
 
-from src.auto_watch.config import PROJECT_DIR, OUTPUT_DIR
-from src.auto_watch.cli import _safe_filename
+from .config import PROJECT_DIR, OUTPUT_DIR
+from .cli import _safe_filename
 
 
 async def download_and_transcribe(video_url: str, course_name: str, title: str) -> dict:
     """영상 다운로드 + 음성→텍스트 전사 (재생과 병렬 실행)"""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = {"mp4": None, "txt": None}
 
     course_dir = OUTPUT_DIR / _safe_filename(course_name)
