@@ -11,7 +11,7 @@
 
 ## 요구 사항
 
-- Python 3.11 이상
+- Python 3.9 이상
 - ffmpeg
 - Google Chrome (Mac 기준 `/Applications/Google Chrome.app/`)
 
@@ -95,12 +95,19 @@ output/
 
 ```
 src/
-├── auto_watch.py              # 메인 (자동 수강 + 다운로드 + 전사)
+├── auto_watch/                # 핵심 패키지
+│   ├── __main__.py            # python -m src.auto_watch 진입점
+│   ├── main.py                # 오케스트레이터
+│   ├── config.py              # 환경변수 + 상수
+│   ├── browser.py             # Playwright 브라우저 설정 + SSO 로그인
+│   ├── courses.py             # 미수강 과목/강의 탐색
+│   ├── player.py              # 강의 재생 + 수강 처리
+│   ├── transcription.py       # 영상 다운로드 + 음성→텍스트 전사
+│   └── cli.py                 # CLI UI + 유틸리티
 ├── audio_pipeline/
 │   ├── converter.py           # MP4 → WAV (ffmpeg)
 │   └── transcriber.py         # WAV → TXT (faster-whisper)
 └── summarize_pipeline/        # AI 요약 (예정)
-    ├── pipeline.py
     └── summarizer.py
 ```
 
