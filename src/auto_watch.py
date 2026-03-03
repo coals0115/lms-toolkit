@@ -10,6 +10,7 @@ Usage:
 import asyncio
 import os
 import re
+import select
 import sys
 import traceback
 from datetime import datetime
@@ -289,6 +290,16 @@ async def get_unwatched_lectures(page: Page, course_id: str, course_name: str = 
     return lectures
 
 
+def _input_with_timeout(prompt: str, timeout: int = 10) -> str | None:
+    """timeout초 안에 입력이 없으면 None 반환 (Unix 전용)."""
+    print(prompt, end="", flush=True)
+    ready, _, _ = select.select([sys.stdin], [], [], timeout)
+    if ready:
+        return sys.stdin.readline().strip()
+    print()
+    return None
+
+
 def select_lectures(all_lectures: List[Dict]) -> List[Dict]:
     """미수강 강의 목록 표시 + 사용자 선택 → 선택된 강의 리스트 반환"""
     if not all_lectures:
@@ -320,9 +331,20 @@ def select_lectures(all_lectures: List[Dict]) -> List[Dict]:
     print(f"\n  총 재생시간: {time_str}")
     print()
 
+    first = True
     while True:
         try:
-            choice = input("재생할 번호 (예: 1,2 / all / q): ").strip().lower()
+            if first:
+                choice = _input_with_timeout(
+                    "재생할 번호 (예: 1,2 / all / q) [10초 후 자동 all]: "
+                )
+                first = False
+                if choice is None:
+                    print("  ⏱ 10초 타임아웃 → 전체 재생")
+                    return all_lectures
+                choice = choice.lower()
+            else:
+                choice = input("재생할 번호 (예: 1,2 / all / q): ").strip().lower()
         except EOFError:
             return []
 
