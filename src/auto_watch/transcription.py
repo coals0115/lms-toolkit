@@ -13,11 +13,12 @@ from .config import (
     PROJECT_DIR,
     USER_AGENT,
 )
+from .types import TranscriptResult
 
 logger = logging.getLogger(__name__)
 
 
-async def download_and_transcribe(video_url: str, course_name: str, title: str) -> dict:
+async def download_and_transcribe(video_url: str, course_name: str, title: str) -> TranscriptResult:
     """영상 다운로드 + 음성→텍스트 전사 (재생과 병렬 실행)"""
     loop = asyncio.get_running_loop()
     result = {"mp4": None, "txt": None}

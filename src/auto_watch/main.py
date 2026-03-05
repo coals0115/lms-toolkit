@@ -6,7 +6,7 @@ import logging
 import sys
 from datetime import datetime
 
-from playwright.async_api import async_playwright
+from playwright.async_api import Page, async_playwright
 
 from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode
@@ -15,11 +15,12 @@ from .courses import get_courses, get_lectures
 from .exceptions import LMSError
 from .log import setup_logging
 from .player import process_lecture
+from .types import Course
 
 logger = logging.getLogger(__name__)
 
 
-async def _run_watch_mode(page, courses):
+async def _run_watch_mode(page: Page, courses: list[Course]) -> str | None:
     """자동 수강 모드: 미수강 동영상만 재생 + 다운로드/전사"""
     target_courses = [c for c in courses if c["videoCount"] > 0]
 
@@ -78,7 +79,7 @@ async def _run_watch_mode(page, courses):
     print(f"{'═' * 40}")
 
 
-async def _run_download_mode(page, courses):
+async def _run_download_mode(page: Page, courses: list[Course]) -> str | None:
     """다운로드 모드: 과목 선택 → 강의 선택 → 다운로드/전사만"""
     while True:
         selected_courses = select_courses(courses)
@@ -127,13 +128,13 @@ async def _run_download_mode(page, courses):
         break
 
 
-def cli_entry():
+def cli_entry() -> None:
     """project.scripts 엔트리포인트"""
     setup_logging()
     asyncio.run(main())
 
 
-async def main():
+async def main() -> None:
     setup_logging()
 
     if not USERID or not PASSWORD:

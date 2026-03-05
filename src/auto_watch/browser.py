@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from playwright.async_api import Frame, Page
+from playwright.async_api import Browser, BrowserContext, Frame, Page
 
 from .config import CHROME_PATH, LOGIN_TIMEOUT_MS, PASSWORD, USER_AGENT, USERID
 from .exceptions import BrowserError, LoginError
@@ -11,7 +11,7 @@ from .exceptions import BrowserError, LoginError
 logger = logging.getLogger(__name__)
 
 
-async def setup_browser(playwright):
+async def setup_browser(playwright) -> tuple[Page, Browser, BrowserContext]:
     """Playwright headed 브라우저 설정 (봇 탐지 우회 포함)"""
     browser = await playwright.chromium.launch(
         headless=False,
@@ -37,7 +37,7 @@ async def setup_browser(playwright):
     return page, browser, context
 
 
-async def login_if_needed(page: Page):
+async def login_if_needed(page: Page) -> None:
     """현재 페이지가 로그인 페이지면 SSO 로그인 수행"""
     if "login" not in page.url and "smartid" not in page.url:
         return

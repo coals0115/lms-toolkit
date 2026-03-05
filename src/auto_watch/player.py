@@ -1,7 +1,5 @@
 """강의 재생(미수강) / 다운로드(수강완료) 처리"""
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import logging
@@ -21,6 +19,7 @@ from .config import (
     SELECTOR_TIMEOUT_MS,
 )
 from .transcription import download_and_transcribe
+from .types import Lecture, ProcessResult
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ def find_commons_frame(page: Page) -> Frame | None:
     return None
 
 
-async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
+async def _enter_lecture_page(page: Page, lecture: Lecture) -> Frame | None:
     """강의 페이지 진입 → iframe 대기 → 이어보기 처리 → commons frame 반환.
     실패 시 None 반환."""
     await page.goto(lecture["href"], wait_until="networkidle")
@@ -188,7 +187,7 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
         await asyncio.sleep(5)
 
 
-async def process_lecture(page: Page, lecture: dict) -> dict:
+async def process_lecture(page: Page, lecture: Lecture) -> ProcessResult:
     """강의 처리: 미수강이면 재생+출석, 수강완료면 다운로드만.
 
     Returns:

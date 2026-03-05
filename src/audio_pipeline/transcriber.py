@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 import json
+import logging
 import os
 import time
 from abc import ABC, abstractmethod
@@ -10,11 +9,12 @@ from dotenv import load_dotenv
 from faster_whisper import WhisperModel
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 # https://developers.rtzr.ai/docs/stt-file/
 
 
-def transcribe_wav_to_text(wav_path: str, txt_path: str, engine="whisper"):
+def transcribe_wav_to_text(wav_path: str, txt_path: str, engine: str = "whisper") -> None:
     if engine == "whisper":
         transcriber = WhisperTranscriber()
     elif engine == "returnzero":
@@ -27,13 +27,12 @@ def transcribe_wav_to_text(wav_path: str, txt_path: str, engine="whisper"):
 
 class Transcriber(ABC):
     @abstractmethod
-    def transcribe(self, wav_path: str, txt_path: str):
+    def transcribe(self, wav_path: str, txt_path: str) -> None:
         pass
 
 
 class WhisperTranscriber(Transcriber):
-    def __init__(self, model_name="turbo"):
-        import os
+    def __init__(self, model_name: str = "turbo") -> None:
         import sys
 
         device = "cpu"
@@ -41,43 +40,42 @@ class WhisperTranscriber(Transcriber):
 
         # .app 번들 내부의 모델 확인
         if getattr(sys, "frozen", False):
-            model_path = os.path.join(sys._MEIPASS, "whisper_models", model_name)
+            model_path = os.path.join(sys._MEIPASS, "whisper_models", model_name)  # type: ignore[attr-defined]
             if os.path.exists(model_path):
-                print(f"[INFO] 번들된 Whisper 모델 사용: {model_path}")
+                logger.info("번들된 Whisper 모델 사용: %s", model_path)
                 self.model = WhisperModel(model_path, device=device, compute_type=compute_type)
                 return
 
-        # 기본 경로에서 모델 로드 (첫 실행 시 자동 다운로드)
-        print(f"[INFO] faster-whisper 모델 로드 중: {model_name}")
+        logger.info("faster-whisper 모델 로드 중: %s", model_name)
         self.model = WhisperModel(model_name, device=device, compute_type=compute_type)
 
-    def transcribe(self, wav_path: str, txt_path: str):
-        try:
-            segments, info = self.model.transcribe(wav_path, language="ko", beam_size=5)
-            duration = info.duration  # 전체 오디오 길이(초)
+    def transcribe(self, wav_path: str, txt_path: str) -> None:
+        segments, info = self.model.transcribe(wav_path, language="ko", beam_size=5)
+        duration = info.duration
 
-            texts = []
-            last_report = 0
-            for segment in segments:
-                texts.append(segment.text)
-                # 60초마다 진행상황 표시
-                if duration and segment.end - last_report >= 60:
-                    pct = segment.end / duration * 100
-                    seg_m, seg_s = divmod(int(segment.end), 60)
-                    dur_m, dur_s = divmod(int(duration), 60)
-                    print(
-                        f"  ├ 스크립트: 전사 {seg_m}:{seg_s:02d}/{dur_m}:{dur_s:02d} ({pct:.0f}%)"
-                    )
-                    last_report = segment.end
+        texts = []
+        last_report = 0
+        for segment in segments:
+            texts.append(segment.text)
+            if duration and segment.end - last_report >= 60:
+                pct = segment.end / duration * 100
+                seg_m, seg_s = divmod(int(segment.end), 60)
+                dur_m, dur_s = divmod(int(duration), 60)
+                logger.info(
+                    "스크립트: 전사 %d:%02d/%d:%02d (%.0f%%)",
+                    seg_m,
+                    seg_s,
+                    dur_m,
+                    dur_s,
+                    pct,
+                )
+                last_report = segment.end
 
-            text = "".join(texts)
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(text)
-            print(f"[Whisper] 변환 완료: {txt_path}")
-            print(f"[Whisper] 감지된 언어: {info.language} (확률: {info.language_probability:.2f})")
-        except Exception as e:
-            print(f"[ERROR] 변환 실패: {e}")
-            raise e
+        text = "".join(texts)
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        logger.info("Whisper 변환 완료: %s", txt_path)
+        logger.info("감지된 언어: %s (확률: %.2f)", info.language, info.language_probability)
 
 
 class ReturnZeroTranscriber(Transcriber):
@@ -96,7 +94,7 @@ class ReturnZeroTranscriber(Transcriber):
         )
         resp.raise_for_status()
         token = resp.json()["access_token"]
-        print("[ReturnZero] 인증 토큰 발급 성공")
+        logger.info("ReturnZero 인증 토큰 발급 성공")
         return token
 
     def _submit_job(self, wav_path: str) -> str:
@@ -122,7 +120,12 @@ class ReturnZeroTranscriber(Transcriber):
         response.raise_for_status()
         return response.json()["id"]  # 이게 transcribe_id
 
-    def _poll_until_complete(self, transcribe_id: str, timeout=180, interval=5) -> dict:
+    def _poll_until_complete(
+        self,
+        transcribe_id: str,
+        timeout: int = 180,
+        interval: int = 5,
+    ) -> dict:
         # 변환 완료 대기
         url = f"https://openapi.vito.ai/v1/transcribe/{transcribe_id}"
         headers = {"Authorization": f"Bearer {self.token}"}
@@ -134,7 +137,7 @@ class ReturnZeroTranscriber(Transcriber):
             data = resp.json()
             status = data.get("status")
 
-            print(f"[Polling] 현재 상태: {status}")
+            logger.info("Polling 현재 상태: %s", status)
             if status == "completed":
                 return data
             elif status == "failed":
@@ -149,21 +152,16 @@ class ReturnZeroTranscriber(Transcriber):
         messages = [utterance.get("msg", "") for utterance in utterances]
         return " ".join(messages)
 
-    def transcribe(self, wav_path: str, txt_path: str):
-        try:
-            transcribe_id = self._submit_job(wav_path)
-            data = self._poll_until_complete(transcribe_id)
-            text = self._parse_text(data)
+    def transcribe(self, wav_path: str, txt_path: str) -> None:
+        transcribe_id = self._submit_job(wav_path)
+        data = self._poll_until_complete(transcribe_id)
+        text = self._parse_text(data)
 
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(text)
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(text)
 
-            txt_raw_path = txt_path.replace(".txt", "_raw_rtzr.txt")
-            with open(txt_raw_path, "w", encoding="utf-8") as f:
-                f.write(json.dumps(data, indent=4))
+        txt_raw_path = txt_path.replace(".txt", "_raw_rtzr.txt")
+        with open(txt_raw_path, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=4))
 
-            print(f"[ReturnZero] 텍스트 변환 완료: {txt_path}")
-
-        except Exception as e:
-            print(f"[ERROR] 변환 실패: {e}")
-            raise e
+        logger.info("ReturnZero 텍스트 변환 완료: %s", txt_path)

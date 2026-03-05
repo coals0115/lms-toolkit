@@ -1,7 +1,5 @@
 """CLI 사용자 인터페이스 및 유틸리티 함수"""
 
-from __future__ import annotations
-
 import re
 from collections import OrderedDict
 from datetime import datetime

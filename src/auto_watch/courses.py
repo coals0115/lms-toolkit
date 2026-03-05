@@ -7,11 +7,12 @@ from playwright.async_api import Page
 
 from .browser import get_tool_content_frame, login_if_needed
 from .config import BASE_URL, MYPAGE_URL
+from .types import Course, Lecture
 
 logger = logging.getLogger(__name__)
 
 
-async def get_courses(page: Page) -> list[dict]:
+async def get_courses(page: Page) -> list[Course]:
     """마이페이지에서 모든 과목 목록 반환"""
     logger.info("마이페이지에서 과목 탐색 중...")
     await page.goto(MYPAGE_URL, wait_until="networkidle")
@@ -61,7 +62,7 @@ async def get_courses(page: Page) -> list[dict]:
     return courses
 
 
-async def get_lectures(page: Page, course_id: str, course_name: str = "") -> list[dict]:
+async def get_lectures(page: Page, course_id: str, course_name: str = "") -> list[Lecture]:
     """과목의 주차학습 페이지에서 강의 목록 반환 (미수강 + 수강완료)"""
     url = f"{BASE_URL}/courses/{course_id}/external_tools/71"
     logger.info("주차학습 페이지 로드 중... (course %s)", course_id)
