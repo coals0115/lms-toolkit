@@ -121,6 +121,11 @@ async def _run_download_mode(page, courses):
         break
 
 
+def cli_entry():
+    """project.scripts 엔트리포인트"""
+    asyncio.run(main())
+
+
 async def main():
     if not USERID or not PASSWORD:
         print("[ERROR] .env에 USERID와 PASSWORD를 설정하세요")

@@ -204,5 +204,3 @@ logs/
 # Auto-watch output (영상 + 스크립트)
 output/
 
-# 진단 스크립트
-inspect_dialog.py
