@@ -172,7 +172,9 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
 
     while True:
         try:
-            if download_mode or expanded:
+            if download_mode:
+                prompt = "번호 / all / b(이전) / q: "
+            elif expanded:
                 prompt = "번호 / all / q: "
             else:
                 prompt = "번호 / all / q / e(펼치기): "
@@ -182,6 +184,9 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
 
         if choice == "q":
             return []
+
+        if choice == "b" and download_mode:
+            return "back"
 
         if choice == "all":
             if download_mode:

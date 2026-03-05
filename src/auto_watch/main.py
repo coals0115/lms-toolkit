@@ -72,45 +72,49 @@ async def _run_watch_mode(page, courses):
 
 async def _run_download_mode(page, courses):
     """다운로드 모드: 과목 선택 → 강의 선택 → 다운로드/전사만"""
-    selected_courses = select_courses(courses)
-    if not selected_courses:
-        print("\n[INFO] 선택 없음. 종료.")
-        return
+    while True:
+        selected_courses = select_courses(courses)
+        if not selected_courses:
+            print("\n[INFO] 선택 없음. 종료.")
+            return
 
-    all_lectures = []
-    for course in selected_courses:
-        lectures = await get_lectures(page, course["courseId"], course["name"])
-        all_lectures.extend(lectures)
+        all_lectures = []
+        for course in selected_courses:
+            lectures = await get_lectures(page, course["courseId"], course["name"])
+            all_lectures.extend(lectures)
 
-    if not all_lectures:
-        print("\n[INFO] 강의 없음!")
-        return
+        if not all_lectures:
+            print("\n[INFO] 강의 없음!")
+            continue
 
-    selected = select_lectures(all_lectures, download_mode=True)
-    if not selected:
-        print("\n[INFO] 선택 없음. 종료.")
-        return
+        selected = select_lectures(all_lectures, download_mode=True)
+        if selected == "back":
+            continue
+        if not selected:
+            print("\n[INFO] 선택 없음. 종료.")
+            return
 
-    sel_total = sum(l["durationSec"] for l in selected)
-    sel_m, sel_s = divmod(sel_total, 60)
-    print(f"\n[INFO] {len(selected)}개 선택, 총 {sel_m}:{sel_s:02d}")
+        sel_total = sum(l["durationSec"] for l in selected)
+        sel_m, sel_s = divmod(sel_total, 60)
+        print(f"\n[INFO] {len(selected)}개 선택, 총 {sel_m}:{sel_s:02d}")
 
-    transcribed = 0
+        transcribed = 0
 
-    for i, lecture in enumerate(selected, 1):
-        print(f"\n[{i}/{len(selected)}]", end=" ")
-        lecture["isCompleted"] = True
-        result = await process_lecture(page, lecture)
-        if result.get("txt"):
-            transcribed += 1
-        await asyncio.sleep(3)
+        for i, lecture in enumerate(selected, 1):
+            print(f"\n[{i}/{len(selected)}]", end=" ")
+            lecture["isCompleted"] = True
+            result = await process_lecture(page, lecture)
+            if result.get("txt"):
+                transcribed += 1
+            await asyncio.sleep(3)
 
-    print(f"\n{'═' * 40}")
-    print(f"  완료!")
-    print(f"  다운로드: {len(selected)}개")
-    if transcribed:
-        print(f"  스크립트: {transcribed}개 추출 → output/")
-    print(f"{'═' * 40}")
+        print(f"\n{'═' * 40}")
+        print(f"  완료!")
+        print(f"  다운로드: {len(selected)}개")
+        if transcribed:
+            print(f"  스크립트: {transcribed}개 추출 → output/")
+        print(f"{'═' * 40}")
+        break
 
 
 async def main():
