@@ -36,13 +36,11 @@ async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
 
     # "이전에 시청했던 XX:XX부터 이어서 보시겠습니까?" 다이얼로그 처리
     try:
-        confirm_dialog = await commons.wait_for_selector("#confirm-dialog", timeout=3000)
-        if confirm_dialog:
-            cancel_btn = await confirm_dialog.query_selector(".confirm-cancel-btn")
-            if cancel_btn:
-                await cancel_btn.click()
-                print("[INFO] 이어보기 다이얼로그 → '아니오' (처음부터 재생)")
-                await asyncio.sleep(1)
+        ok_btn = await commons.wait_for_selector(".confirm-ok-btn", timeout=5000)
+        if ok_btn:
+            await ok_btn.click()
+            print("[INFO] 이어보기 다이얼로그 → '예' (이어서 재생)")
+            await asyncio.sleep(1)
     except Exception:
         pass  # 다이얼로그가 안 뜨면 정상 — 처음 보는 강의
 
