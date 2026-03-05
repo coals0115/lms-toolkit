@@ -2,11 +2,11 @@
 
 import asyncio
 import logging
-import sys
 
 from playwright.async_api import Frame, Page
 
 from .config import CHROME_PATH, LOGIN_TIMEOUT_MS, PASSWORD, USER_AGENT, USERID
+from .exceptions import BrowserError, LoginError
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +101,7 @@ async def login_if_needed(page: Page):
                 break
 
     if "login" in page.url or "smartid" in page.url:
-        logger.error("로그인 실패 — .env의 USERID/PASSWORD 확인 필요")
-        sys.exit(1)
+        raise LoginError("로그인 실패 — .env의 USERID/PASSWORD 확인 필요")
 
     logger.info("로그인 성공 — %s", page.url)
 
@@ -112,7 +111,7 @@ async def get_tool_content_frame(page: Page, timeout: int = 15000) -> Frame:
     await page.wait_for_selector("#tool_content", timeout=timeout)
     frame = page.frame("tool_content")
     if not frame:
-        raise Exception("tool_content frame not found")
+        raise BrowserError("tool_content frame not found")
     await frame.wait_for_load_state("domcontentloaded")
     # iframe 내부 콘텐츠 로드 대기
     await asyncio.sleep(2)

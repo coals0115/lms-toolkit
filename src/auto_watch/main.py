@@ -12,6 +12,7 @@ from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode
 from .config import PASSWORD, USERID
 from .courses import get_courses, get_lectures
+from .exceptions import LMSError
 from .log import setup_logging
 from .player import process_lecture
 
@@ -163,6 +164,9 @@ async def main():
                 if result != "back":
                     break
 
+        except LMSError as e:
+            logger.error("%s", e)
+            sys.exit(1)
         finally:
             with contextlib.suppress(EOFError):
                 input("\n 엔터를 누르면 브라우저를 닫습니다...")
