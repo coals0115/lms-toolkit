@@ -37,8 +37,8 @@ uv run lms
 <summary>펼치기</summary>
 
 ```bash
-git clone https://github.com/<your-repo>/lms-summarizer.git
-cd lms-summarizer
+git clone https://github.com/<your-repo>/lms-toolkit.git
+cd lms-toolkit
 
 brew install ffmpeg
 curl -LsSf https://astral.sh/uv/install.sh | sh

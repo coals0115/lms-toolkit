@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# LMS Summarizer 실행 스크립트
+# LMS Toolkit 실행 스크립트
 
 cd "$(dirname "$0")"
 

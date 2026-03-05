@@ -1,5 +1,5 @@
 [project]
-name = "lms-summarizer"
+name = "lms-toolkit"
 version = "1.0.0"
 description = "숭실대 LMS 자동 수강 처리 + 스크립트 추출 CLI"
 requires-python = ">=3.11"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────
-# LMS Summarizer 설치 스크립트
+# LMS Toolkit 설치 스크립트
 # ─────────────────────────────────────────────
 
 cd "$(dirname "$0")"
@@ -21,7 +21,7 @@ fail() { echo -e "  ${RED}[오류]${NC} $1"; }
 
 echo ""
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD} LMS Summarizer 설치${NC}"
+echo -e "${BOLD} LMS Toolkit 설치${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
