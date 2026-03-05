@@ -36,7 +36,9 @@ async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
 
     # "이전에 시청했던 XX:XX부터 이어서 보시겠습니까?" 다이얼로그 처리
     try:
-        ok_btn = await commons.wait_for_selector(".confirm-ok-btn", timeout=5000)
+        ok_btn = await commons.wait_for_selector(
+            ".confirm-ok-btn", timeout=5000, state="visible",
+        )
         if ok_btn:
             await ok_btn.click()
             print("[INFO] 이어보기 다이얼로그 → '예' (이어서 재생)")
@@ -66,6 +68,17 @@ async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
         print(f"[ERROR] 재생 버튼 클릭 실패: {e}")
         page.remove_listener("request", on_request)
         return None
+
+    # 재생 버튼 클릭 후 인트로 재생 → 이어보기 다이얼로그가 뜰 수 있음 (~5초 소요)
+    try:
+        ok_btn = await commons.wait_for_selector(
+            ".confirm-ok-btn", timeout=10000, state="visible",
+        )
+        if ok_btn:
+            await ok_btn.click()
+            print("[INFO] 이어보기 다이얼로그 → '예' (이어서 재생)")
+    except Exception:
+        pass
 
     await asyncio.sleep(3)
 
