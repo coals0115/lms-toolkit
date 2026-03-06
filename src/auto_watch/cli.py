@@ -6,14 +6,15 @@ from datetime import datetime
 
 
 def select_mode() -> str:
-    """시작 시 모드 선택. 'watch' 또는 'download' 반환."""
+    """시작 시 모드 선택. 'watch', 'download', 또는 'sync' 반환."""
     print("\n모드를 선택하세요:")
     print("  [1] 자동 수강 — 미수강 동영상 재생 + 다운로드/전사")
     print("  [2] 다운로드  — 과목 선택 → 강의 다운로드/전사만")
+    print("  [3] 동기화    — LMS 현황 → Obsidian vault 업데이트")
 
     while True:
         try:
-            choice = input("\n번호 (1/2): ").strip()
+            choice = input("\n번호 (1/2/3): ").strip()
         except EOFError:
             return "watch"
 
@@ -21,7 +22,9 @@ def select_mode() -> str:
             return "watch"
         if choice == "2":
             return "download"
-        print("  1 또는 2를 입력하세요.")
+        if choice == "3":
+            return "sync"
+        print("  1, 2, 또는 3을 입력하세요.")
 
 
 def select_courses(courses: list[dict]) -> list[dict]:

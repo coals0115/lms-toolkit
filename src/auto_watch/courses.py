@@ -7,7 +7,7 @@ from playwright.async_api import Page
 
 from .browser import get_tool_content_frame, login_if_needed
 from .config import BASE_URL, MYPAGE_URL
-from .types import Course, Lecture
+from .types import Course, CourseStatus, Lecture, WeeklyItem
 
 logger = logging.getLogger(__name__)
 
@@ -175,3 +175,145 @@ async def get_lectures(page: Page, course_id: str, course_name: str = "") -> lis
         logger.info("  %s %s (%d:%02d)", status, lec["title"], m, s)
 
     return lectures
+
+
+async def get_items_by_week(
+    page: Page, course_id: str, course_name: str = ""
+) -> CourseStatus:
+    """과목의 주차학습 페이지에서 모든 아이템을 주차별로 그룹핑하여 반환.
+
+    get_lectures()와 달리:
+    - movie 필터 없음 — assignment, file 등 모든 itemType 포함
+    - 모듈 컨테이너 단위로 순회하여 주차(weekNumber) 부착
+    - 시작일 미래 필터 없음 — 전체 주차 데이터 수집
+    """
+    url = f"{BASE_URL}/courses/{course_id}/external_tools/71"
+    logger.info("[sync] 주차학습 페이지 로드 중... (course %s)", course_id)
+    await page.goto(url, wait_until="networkidle")
+    await login_if_needed(page)
+    if "external_tools/71" not in page.url:
+        await page.goto(url, wait_until="networkidle")
+
+    frame = await get_tool_content_frame(page)
+
+    # "모두 펼치기" 클릭
+    try:
+        expand_btn = await frame.query_selector('text="모두 펼치기"')
+        if expand_btn:
+            await expand_btn.click()
+            await asyncio.sleep(2)
+            logger.info("[sync] 전체 주차 펼침")
+    except Exception:
+        pass
+
+    items_raw: list[dict] = await frame.evaluate("""
+        () => {
+            const results = [];
+            // DOM 구조: xnmb-module-list > div(주차컨테이너) > [헤더, 아이템컨테이너]
+            // 헤더(.xnmb-module-outer-wrapper)와 아이템은 형제 관계
+            const moduleList = document.querySelector('.xnmb-module-list');
+            if (!moduleList) return results;
+
+            // xnmb-module-list의 직접 자식 중 주차 컨테이너 순회
+            for (const weekContainer of moduleList.children) {
+                // 헤더 div 건너뛰기
+                if (weekContainer.classList?.contains('xnmb-header')) continue;
+
+                // 주차 헤더에서 주차 번호 추출
+                const headerEl = weekContainer.querySelector('.xnmb-module-title');
+                const headerText = headerEl?.textContent || '';
+                const weekMatch = headerText.match(/(\\d+)\\s*주차/);
+                const weekNumber = weekMatch ? parseInt(weekMatch[1]) : 0;
+
+                // 아이템 순회 (헤더의 형제 div 안에 위치)
+                const itemEls = weekContainer.querySelectorAll(
+                    '.xnmb-module_item-outer-wrapper'
+                );
+                for (const item of itemEls) {
+                    const link = item.querySelector('a.xnmb-module_item-left-title');
+                    if (!link) continue;
+
+                    // 아이콘으로 타입 판별
+                    const iconEl = item.querySelector('i.xnmb-module_item-icon');
+                    const iconClasses = iconEl ? iconEl.className : '';
+                    const isVideo = iconClasses.includes('movie') || iconClasses.includes('readystream');
+                    const itemType = isVideo ? 'movie'
+                        : iconClasses.includes('file') ? 'file'
+                        : iconClasses.includes('assignment') ? 'assignment'
+                        : 'other';
+
+                    const href = link.href || '';
+                    const title = link.textContent?.trim() || '';
+
+                    // 텍스트 노드 수집 (innerText 합치기 버그 방지)
+                    const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+                    const textParts = [];
+                    while (walker.nextNode()) {
+                        const t = walker.currentNode.textContent.trim();
+                        if (t) textParts.push(t);
+                    }
+                    const text = textParts.join(' ');
+
+                    const isCompleted = text.includes('완료') && !text.includes('미완료');
+
+                    // 시작일
+                    const startMatch = text.match(/시작\\s+(\\d{1,2})월\\s+(\\d{1,2})일/);
+                    let startDate = null;
+                    if (startMatch) {
+                        const now = new Date();
+                        startDate = new Date(now.getFullYear(), parseInt(startMatch[1]) - 1, parseInt(startMatch[2]));
+                    }
+
+                    // 마감일
+                    const endMatch = text.match(/(?:마감|종료)\\s+(\\d{1,2})월\\s+(\\d{1,2})일/);
+                    let deadline = null;
+                    if (endMatch) {
+                        const now = new Date();
+                        deadline = new Date(now.getFullYear(), parseInt(endMatch[1]) - 1, parseInt(endMatch[2]));
+                    }
+
+                    // 재생 시간 (동영상만 — file/assignment는 MM:SS가 마감시간)
+                    let durationSec = 0;
+                    if (isVideo) {
+                        const allTimes = [...text.matchAll(/(\\d+):(\\d{2})(?!\\d)/g)];
+                        for (const m of allTimes) {
+                            const mins = parseInt(m[1]);
+                            const secs = parseInt(m[2]);
+                            if (secs < 60 && mins >= 1 && mins <= 180) {
+                                durationSec = mins * 60 + secs;
+                            }
+                        }
+                    }
+
+                    results.push({
+                        title, href, isCompleted, durationSec, itemType,
+                        startDate: startDate?.toISOString() || null,
+                        deadline: deadline?.toISOString() || null,
+                        weekNumber,
+                    });
+                }
+            }
+            return results;
+        }
+    """)
+
+    # 주차별 그룹핑
+    weeks: dict[int, list[WeeklyItem]] = {}
+    for item in items_raw:
+        item["courseName"] = course_name
+        wn = item["weekNumber"]
+        if wn not in weeks:
+            weeks[wn] = []
+        weeks[wn].append(item)
+
+    total_items = len(items_raw)
+    total_weeks = len([w for w in weeks if w > 0])
+    logger.info(
+        "[sync] %s: %d개 아이템, %d주차", course_name or course_id, total_items, total_weeks
+    )
+
+    return CourseStatus(
+        courseName=course_name,
+        courseId=course_id,
+        weeks=weeks,
+    )

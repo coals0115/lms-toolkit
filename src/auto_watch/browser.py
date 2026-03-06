@@ -11,10 +11,12 @@ from .exceptions import BrowserError, LoginError
 logger = logging.getLogger(__name__)
 
 
-async def setup_browser(playwright) -> tuple[Page, Browser, BrowserContext]:
-    """Playwright headed 브라우저 설정 (봇 탐지 우회 포함)"""
+async def setup_browser(
+    playwright, headless: bool = False
+) -> tuple[Page, Browser, BrowserContext]:
+    """Playwright 브라우저 설정 (봇 탐지 우회 포함)"""
     browser = await playwright.chromium.launch(
-        headless=False,
+        headless=headless,
         executable_path=CHROME_PATH,
         args=[
             "--disable-blink-features=AutomationControlled",

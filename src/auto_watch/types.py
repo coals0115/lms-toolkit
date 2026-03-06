@@ -20,6 +20,24 @@ class Lecture(TypedDict):
     deadline: str | None
 
 
+class WeeklyItem(TypedDict):
+    title: str
+    href: str
+    isCompleted: bool
+    durationSec: int
+    itemType: str  # 'movie' | 'assignment' | 'file' | 'other'
+    courseName: str
+    startDate: str | None
+    deadline: str | None
+    weekNumber: int
+
+
+class CourseStatus(TypedDict):
+    courseName: str
+    courseId: str
+    weeks: dict[int, list[WeeklyItem]]  # week_number → items
+
+
 class ProcessResult(TypedDict):
     attended: bool
     download_only: bool
