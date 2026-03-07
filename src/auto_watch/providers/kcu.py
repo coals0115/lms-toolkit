@@ -214,20 +214,17 @@ class KCUProvider:
     async def _get_available_weeks(self, page: Page) -> list[int]:
         """lectRoom 주차목록에서 수강 가능한 주차 번호만 반환.
 
-        주차 사이드바에서 "강의 시작전"이 아닌 주차만 포함.
+        주차 사이드바는 swiper 슬라이드 구조:
+        div.swiper-slide.weekNo 안에 <p> 태그로 "N주." 제목과
+        "미수강"/"강의 시작전" 등 상태 텍스트가 포함됨.
         """
         weeks = await page.evaluate("""
             () => {
                 const result = [];
-                // 주차목록 항목: 각 주차 블록에 주차번호와 상태 텍스트가 있음
-                const weekItems = document.querySelectorAll(
-                    '.weekList li, .week-list li, [class*="weekList"] li, '
-                    + '[class*="week"] > li, .lnb_cont li'
-                );
-                for (const li of weekItems) {
-                    const text = li.textContent || '';
-                    // "N주." 패턴에서 주차 번호 추출
-                    const weekMatch = text.match(/(\\d+)주/);
+                const slides = document.querySelectorAll('.swiper-slide.weekNo');
+                for (const slide of slides) {
+                    const text = slide.textContent || '';
+                    const weekMatch = text.match(/(\\d+)주\\./);
                     if (!weekMatch) continue;
                     const weekNo = parseInt(weekMatch[1]);
                     // "강의 시작전"이 포함되어 있으면 미개설
