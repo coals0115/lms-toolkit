@@ -25,14 +25,15 @@ uv run pytest -v                  # 테스트
 ## 환경 변수 (.env)
 
 ```
-# 숭실대 (SSU_* 또는 USERID/PASSWORD로 하위호환)
+# 숭실대 (필수, install.sh에서 자동 생성)
 SSU_USERID=(학번)
 SSU_PASSWORD=(비밀번호)
 
-# 숭실사이버대
+# 숭실사이버대 (선택, install.sh에서 선택 입력 또는 수동 추가)
 KCU_USERID=(학번)
 KCU_PASSWORD=(비밀번호)
 
+# 레거시 호환: USERID/PASSWORD도 SSU 폴백으로 지원
 CHROME_PATH=(선택, Chrome 경로 오버라이드)
 ```
 
