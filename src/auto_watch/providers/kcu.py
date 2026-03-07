@@ -373,6 +373,7 @@ class KCUProvider:
 
     async def _navigate_to_lect_room(self, page: Page, lect_meta: dict) -> None:
         """POST form으로 lectRoom 페이지에 진입"""
+        logger.info("강의 페이지 로드 중...")
         form_data = {
             "shyr": lect_meta["shyr"],
             "smstCd": lect_meta["smstCd"],
@@ -407,9 +408,11 @@ class KCUProvider:
 
         await page.wait_for_load_state("networkidle")
         await asyncio.sleep(3)
+        logger.info("강의 페이지 로드 완료")
 
     async def _wait_for_player_frame(self, page: Page) -> Frame | None:
         """cndIfram(플레이어 iframe) 로드 대기 후 Frame 반환"""
+        logger.info("플레이어 로드 중...")
         try:
             await page.wait_for_selector(
                 "iframe#cndIfram, iframe.cndIfram", timeout=IFRAME_TIMEOUT_MS
@@ -422,15 +425,17 @@ class KCUProvider:
         player_frame = self._find_player_frame(page)
         if not player_frame:
             # iframe이 아직 로드되지 않았을 수 있음 — 재시도
-            for _ in range(5):
+            for attempt in range(5):
                 await asyncio.sleep(2)
                 player_frame = self._find_player_frame(page)
                 if player_frame:
                     break
+                logger.info("플레이어 재시도 %d/5", attempt + 1)
 
         if player_frame:
             await player_frame.wait_for_load_state("domcontentloaded")
             await asyncio.sleep(2)
+            logger.info("플레이어 로드 완료")
 
         return player_frame
 
@@ -474,6 +479,7 @@ class KCUProvider:
                 }
             """)
             if src and not src.startswith("blob:"):
+                logger.info("video 요소에서 URL 추출 완료")
                 return src
         except Exception as e:
             logger.debug("video src 추출 실패: %s", e)

@@ -47,7 +47,9 @@ def _download_mp4(video_url: str, mp4_path, referer: str) -> str:
 
 
 async def _download_hls(video_url: str, mp4_path) -> str:
-    """ffmpeg로 HLS(m3u8) → MP4 변환"""
+    """ffmpeg로 HLS(m3u8) → MP4 변환 (진행률 실시간 출력)"""
+    import re
+
     cmd = [
         "ffmpeg",
         "-y",
@@ -64,9 +66,24 @@ async def _download_hls(video_url: str, mp4_path) -> str:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    _, stderr = await proc.communicate()
+    # stderr를 실시간 읽으면서 time= 패턴 파싱
+    last_log_sec = 0
+    stderr_chunks: list[bytes] = []
+    assert proc.stderr is not None
+    async for line in proc.stderr:
+        stderr_chunks.append(line)
+        text = line.decode(errors="replace")
+        m = re.search(r"time=(\d+):(\d+):(\d+)", text)
+        if m:
+            sec = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+            if sec - last_log_sec >= 30:
+                mm, ss = divmod(sec, 60)
+                logger.info("다운로드: %d:%02d 처리됨...", mm, ss)
+                last_log_sec = sec
+    await proc.wait()
     if proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg 실패: {stderr.decode()[-500:]}")
+        stderr_text = b"".join(stderr_chunks[-20:]).decode(errors="replace")
+        raise RuntimeError(f"ffmpeg 실패: {stderr_text[-500:]}")
     return str(mp4_path)
 
 
