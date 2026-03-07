@@ -39,6 +39,13 @@ CHROME_PATH=(선택, Chrome 경로 오버라이드)
 - 출력: `output/과목명/` 에 `.mp4` + `.txt` 저장. WAV는 전사 후 자동 삭제
 - **로깅**: 시스템 로그는 stderr (logging 모듈), CLI 대면 출력만 stdout (print)
 
+## 플러그인 구조
+
+- `src/auto_watch/plugin.py`에 `entry_points` 기반 plugin discovery 구현
+- **학업 관리(tracker) 기능**은 별도 private 패키지 `lms-tracker`로 분리됨 (경로: `../lms-tracker/`)
+  - 목적: 자동 수강이 출석을 찍어주지만 실제 공부 여부는 별도 추적 필요 (출석 vs 공부 2트랙)
+- tracker 관련 작업 시 `lms-tracker` 패키지에서 수정할 것 (`lms-summarizer`에는 tracker 코드 없음)
+
 ## 규칙
 
 - `src/auto_watch/` 변경 시 영향받는 문서를 같이 업데이트:
