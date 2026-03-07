@@ -60,7 +60,21 @@ else
     info "uv 설치 중..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.local/bin:$PATH"
-    ok "uv 설치 완료"
+
+    # 사용자 로그인 쉘의 RC 파일에 PATH 추가 (중복 방지)
+    case "${SHELL:-/bin/zsh}" in
+        */bash) SHELL_RC="$HOME/.bashrc" ;;
+        *)      SHELL_RC="$HOME/.zshrc"  ;;
+    esac
+    if ! grep -q '$HOME/.local/bin' "$SHELL_RC" 2>/dev/null; then
+        echo '' >> "$SHELL_RC"
+        echo '# uv (installed by lms-toolkit)' >> "$SHELL_RC"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        ok "uv 설치 완료 (PATH를 $SHELL_RC 에 추가함)"
+    else
+        ok "uv 설치 완료"
+    fi
+    UV_INSTALLED=true
 fi
 
 # ─────────────────────────────────────────────
@@ -151,7 +165,16 @@ echo -e "${GREEN}${BOLD} 설치 완료!${NC}"
 echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "  실행 방법:"
+echo "    ./run.sh"
+echo ""
+echo "  또는 uv를 직접 사용:"
 echo "    uv run lms"
+if [ "${UV_INSTALLED:-}" = true ]; then
+    echo ""
+    echo -e "  ${YELLOW}[참고]${NC} uv를 새로 설치했으므로, uv 명령어를 쓰려면"
+    echo "         터미널을 껐다 켜거나 아래 명령어를 먼저 실행하세요:"
+    echo "    source ~/.zshrc"
+fi
 echo ""
 echo "  참고: 첫 실행 시 AI 모델 다운로드로"
 echo "        약 1.5GB 추가 다운로드가 발생합니다."
