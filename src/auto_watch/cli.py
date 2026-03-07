@@ -4,6 +4,42 @@ import re
 from collections import OrderedDict
 from datetime import datetime
 
+from .config import SCHOOL_CONFIGS
+
+
+def select_school() -> str:
+    """학교 선택 메뉴. 계정이 하나만 설정되어 있으면 자동 선택."""
+    available = [c for c in SCHOOL_CONFIGS.values() if c.userid and c.password]
+
+    if not available:
+        # 계정 없어도 일단 선택하게 함 (이후 로그인에서 에러 처리)
+        available = list(SCHOOL_CONFIGS.values())
+
+    if len(available) == 1:
+        return available[0].name
+
+    print("\n학교를 선택하세요:")
+    for i, config in enumerate(available, 1):
+        print(f"  [{i}] {config.display_name}")
+    print("  [q] 종료")
+
+    while True:
+        try:
+            choice = input("\n번호: ").strip().lower()
+        except EOFError:
+            return available[0].name
+
+        if choice == "q":
+            raise SystemExit(0)
+
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(available):
+                return available[idx - 1].name
+        except ValueError:
+            pass
+        print(f"  1~{len(available)} 또는 q를 입력하세요.")
+
 
 def select_mode(plugins=None) -> str:
     """시작 시 모드 선택. 내장 모드 + 플러그인 모드를 동적으로 표시."""
@@ -237,15 +273,6 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
         except ValueError:
             valid_cmds = "숫자, all, b, q, e" if not expanded else "숫자, all, b, q"
             print(f"  {valid_cmds} 중 하나를 입력하세요.")
-
-
-def _is_target_video_url(url: str) -> bool:
-    """재생 중인 강의 영상 URL인지 판별"""
-    if not url.endswith(".mp4"):
-        return False
-    if "commons.ssu.ac.kr" not in url and "commonscdn.com" not in url:
-        return False
-    return "intro.mp4" not in url and "media_files" in url
 
 
 def _safe_filename(name: str) -> str:
