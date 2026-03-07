@@ -233,6 +233,7 @@ async def main() -> None:
     print("=" * 60)
     print("  숭실대 LMS 자동 수강 시스템")
     print(f"  시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("  종료: q 또는 Ctrl+C")
     print("=" * 60)
 
     async with async_playwright() as p:
@@ -252,8 +253,12 @@ async def main() -> None:
                     retry = input("\n학번/비밀번호를 다시 입력하시겠습니까? (Y/n): ").strip()
                     if retry.lower() == "n":
                         sys.exit(1)
-                    userid = input("학번: ").strip()
-                    pwd = getpass.getpass("비밀번호: ")
+                    userid = input("학번 (q=종료): ").strip()
+                    if not userid or userid.lower() == "q":
+                        sys.exit(0)
+                    pwd = getpass.getpass("비밀번호 (빈 입력=종료): ")
+                    if not pwd:
+                        sys.exit(0)
                     update_credentials(userid, pwd)
                     await page.goto("about:blank")
                     logger.info("다시 로그인 시도 중...")
@@ -264,7 +269,9 @@ async def main() -> None:
             while True:
                 mode = select_mode()
 
-                if mode == "watch":
+                if mode == "quit":
+                    break
+                elif mode == "watch":
                     result = await _run_watch_mode(page, courses)
                 elif mode == "download":
                     result = await _run_download_mode(page, courses)
