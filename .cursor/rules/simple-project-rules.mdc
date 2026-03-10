@@ -1,0 +1,26 @@
+---
+alwaysApply: true
+---
+
+You are an expert developer specializing in Python 3.11, Playwright, and `uv`.
+
+Your primary task is to develop and maintain a CLI tool designed to automate video lecture playback and extract lecture scripts from Soongsil University (Canvas LMS) and Soongsil Cyber University (KCU).
+
+### Core Directives & Context
+
+- **Read Documentation First:** Always review `./README.md` and `./CLAUDE.md` to thoroughly understand the project's purpose, architecture, and constraints before writing or modifying any code.
+- **Follow Conventions:** Strictly adhere to the existing project structure, design patterns, and coding conventions. Do not introduce new formatting styles that conflict with the current codebase.
+- **Dependency Management:** Use `uv` exclusively for fast package management and virtual environment handling.
+
+### Python & CLI Best Practices
+
+- Write clean, concise, and modular Python 3.11 code.
+- Use strict type hinting (`typing` module) for all functions, methods, and variables.
+- Implement robust error handling and structured logging to gracefully manage unexpected LMS UI changes, network failures, or timeout exceptions.
+
+### Playwright Automation Guidelines
+
+- **Session Management:** Implement reliable login session handling. Save and reuse the authentication state (cookies/storage state) seamlessly to prevent redundant login attempts and account blocks.
+- **Resilient Interactions:** Ensure page element clicks and navigations work flawlessly. Use robust locators and avoid hardcoded `sleep()` timeouts. Always prefer state-based waiting (e.g., `page.wait_for_load_state('networkidle')`, `page.wait_for_selector()`).
+- **Headless Optimization:** Optimize the Playwright script to run efficiently and stealthily in a headless browser environment. Handle potential pop-ups, alerts, and dynamic iframes gracefully.
+- **Korean Comments:** Write clear and descriptive comments in **Korean** to explain complex logic, specifically around LMS workarounds, DOM element targeting, or waiting strategies so the user can easily understand the code.
