@@ -12,7 +12,7 @@ from playwright.async_api import Page, async_playwright
 
 from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode, select_school
-from .config import SCHOOL_CONFIGS, update_credentials
+from .config import HEADLESS, SCHOOL_CONFIGS, update_credentials
 from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .plugin import discover_plugins
@@ -138,6 +138,12 @@ async def _run_download_mode(
 
 def _parse_args(plugins=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LMS 자동 수강 시스템")
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        default=HEADLESS,
+        help="브라우저를 headless 모드로 실행합니다. (env: LMS_HEADLESS=1)",
+    )
     if plugins:
         for plugin in plugins:
             plugin.add_arguments(parser)
@@ -170,9 +176,9 @@ async def main() -> None:
     if active_plugin:
         async with async_playwright() as p:
             try:
-                page, browser, _context = await setup_browser(p, headless=True)
+                page, browser, _context = await setup_browser(p, headless=args.headless)
             except Exception:
-                logger.warning("headless 실패, headed로 재시도")
+                logger.warning("브라우저 실행 실패(headless=%s), headed로 재시도", args.headless)
                 page, browser, _context = await setup_browser(p, headless=False)
 
             try:
@@ -196,7 +202,7 @@ async def main() -> None:
     print("=" * 60)
 
     async with async_playwright() as p:
-        page, browser, _context = await setup_browser(p)
+        page, browser, _context = await setup_browser(p, headless=args.headless)
 
         try:
             # 로그인 재시도 루프 (최대 3회)

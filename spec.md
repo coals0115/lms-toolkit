@@ -1,7 +1,7 @@
 # LMS Auto-Watch & Transcript — Spec
 
 > 작성: 2026-03-02 20:42
-> 갱신: 2026-03-07
+> 갱신: 2026-03-10
 > 상태: M3.6 완료 — 멀티 LMS + KCU Provider 구현됨
 
 ## 한 줄 목적
@@ -124,7 +124,7 @@ output/
 - **SSU 1x 배속 필수**: SSU LMS 서버가 `invalidPbrate`로 배속 감지. 초과 시 부정행위 처리
 - **KCU 2x 배속 기본**: KCU는 배속 제한 없음. 2배속 자동 설정
 - **동시 수강 불가**: 창 여러 개로 동시 재생하면 안 됨. 순차 재생만
-- **headed 브라우저**: 헤드리스면 LTI 플레이어가 완료 이벤트 안 보낼 수 있음
+- 기본은 **headed 브라우저**. 필요 시 `--headless` 또는 `LMS_HEADLESS=1`로 실행 가능
 - **SSO 로그인**: `page.type` + JS `btn_click` 방식 (Playwright `fill`이 안 먹힘)
 
 ## 범위 밖 (Out of Scope)
@@ -137,7 +137,7 @@ output/
 ## 기술 스택
 
 - **언어**: Python 3.11+
-- **브라우저 자동화**: Playwright (headed, Chromium)
+- **브라우저 자동화**: Playwright (Chromium, 기본 headed / 옵션 headless)
 - **음성→텍스트**: faster-whisper (CTranslate2, 로컬)
 - **자동화 트리거**: OpenClaw (cron + 텔레그램)
 - **기존 코드**: lms-toolkit 레포 (Playwright, faster-whisper 이미 셋업됨)

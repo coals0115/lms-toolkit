@@ -40,7 +40,7 @@ CHROME_PATH=(선택, Chrome 경로 오버라이드)
 ## 비직관적 사실
 
 - **Python >=3.11** (uv + pyproject.toml 기반)
-- **headed 브라우저 필수**: 헤드리스면 LTI 플레이어 완료 이벤트 미발생
+- 기본은 headed, 필요 시 `--headless` 또는 `LMS_HEADLESS=1`로 headless 실행 가능
 - **Chrome 경로**: 기본 `/Applications/Google Chrome.app/`, `CHROME_PATH` 환경변수로 오버라이드 가능
 - **Whisper 모델 캐시**: `~/.cache/huggingface/hub/` (~1.5GB)
 - 출력: `output/과목명/` 에 `.mp4` + `.txt` 저장. WAV는 전사 후 자동 삭제

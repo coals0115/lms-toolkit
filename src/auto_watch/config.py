@@ -9,6 +9,14 @@ from dotenv import load_dotenv, set_key
 load_dotenv()
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    """환경변수의 불리언 값을 안전하게 파싱"""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass
 class SchoolConfig:
     name: str
@@ -73,6 +81,7 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/122.0.0.0 Safari/537.36"
 )
+HEADLESS = _env_flag("LMS_HEADLESS", default=False)
 
 # 타임아웃 (밀리초)
 LOGIN_TIMEOUT_MS = 10_000
