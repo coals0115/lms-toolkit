@@ -1,7 +1,7 @@
 # LMS Auto-Watch & Transcript — Spec
 
 > 작성: 2026-03-02 20:42
-> 갱신: 2026-03-10
+> 갱신: 2026-03-11
 > 상태: M3.6 완료 — 멀티 LMS + KCU Provider 구현됨
 
 ## 한 줄 목적
@@ -125,6 +125,7 @@ output/
 - **KCU 2x 배속 기본**: KCU는 배속 제한 없음. 2배속 자동 설정
 - **동시 수강 불가**: 창 여러 개로 동시 재생하면 안 됨. 순차 재생만
 - 기본은 **headed 브라우저**. 필요 시 `--headless` 또는 `LMS_HEADLESS=1`로 실행 가능
+- 브라우저 실행 파일 우선순위: `CHROME_PATH` → OS 기본 Chrome 경로 탐색 → Playwright Chromium
 - **SSO 로그인**: `page.type` + JS `btn_click` 방식 (Playwright `fill`이 안 먹힘)
 
 ## 범위 밖 (Out of Scope)
