@@ -15,7 +15,7 @@
 
 - Python 3.11 이상
 - ffmpeg
-- Google Chrome (Mac 기준 `/Applications/Google Chrome.app/`)
+- 브라우저 실행 파일 (우선순위: `CHROME_PATH` > OS 기본 Chrome 경로 > Playwright Chromium)
 
 ## 빠른 시작
 
@@ -26,6 +26,8 @@ bash install.sh
 ```
 
 Homebrew, Python, ffmpeg, Playwright 등 필요한 모든 것을 자동 설치하고, 숭실대 학번/비밀번호를 입력받아 `.env` 파일을 생성합니다. 숭실사이버대(KCU) 계정도 선택적으로 함께 등록할 수 있습니다.
+
+> `install.sh`는 macOS용 설치 스크립트입니다. Linux에서는 아래 수동 설치를 사용하세요.
 
 ### 실행
 
@@ -63,6 +65,9 @@ KCU_PASSWORD=비밀번호
 
 # 선택: 1/true/yes/on 중 하나면 headless 실행
 LMS_HEADLESS=1
+
+# 선택: 브라우저 실행 파일 직접 지정 (Linux 예: /usr/bin/google-chrome)
+CHROME_PATH=
 ```
 
 실행:
@@ -168,6 +173,19 @@ src/
 
 ```bash
 uv run python -m playwright install chromium
+```
+
+Ubuntu/Linux에서 `BrowserType.launch: executable doesn't exist at /Applications/...` 오류가 나면
+`CHROME_PATH`를 Linux 경로로 지정하거나(예: `/usr/bin/google-chrome`), 비워서 Playwright 기본 Chromium을 사용하세요.
+
+```bash
+# 1) Linux Chrome 설치 경로 사용
+export CHROME_PATH=/usr/bin/google-chrome
+uv run lms-toolkit
+
+# 2) CHROME_PATH 제거 후 Playwright Chromium 사용
+unset CHROME_PATH
+uv run lms-toolkit
 ```
 
 headless로 실행하려면 아래 둘 중 하나를 사용하세요.

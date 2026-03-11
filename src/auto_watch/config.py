@@ -1,6 +1,7 @@
 """설정 상수 및 환경변수 로딩"""
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,6 +16,28 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _find_default_chrome_path() -> str | None:
+    """운영체제별 기본 Chrome 실행 파일 경로를 탐색"""
+    if sys.platform == "darwin":
+        candidates = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ]
+    elif sys.platform.startswith("linux"):
+        candidates = [
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+        ]
+    else:
+        candidates = []
+
+    for path in candidates:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
 
 
 @dataclass
@@ -72,10 +95,8 @@ OUTPUT_DIR = PROJECT_DIR / "output"
 VAULT_PATH = os.getenv("VAULT_PATH", "")
 
 # 브라우저
-CHROME_PATH = os.getenv(
-    "CHROME_PATH",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-)
+_chrome_path_env = os.getenv("CHROME_PATH", "").strip()
+CHROME_PATH = _chrome_path_env or _find_default_chrome_path()
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
