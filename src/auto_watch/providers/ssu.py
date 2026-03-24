@@ -133,8 +133,7 @@ class SSUProvider:
         frame = page.frame("tool_content")
         if not frame:
             raise BrowserError("tool_content frame not found")
-        await frame.wait_for_load_state("domcontentloaded")
-        await asyncio.sleep(2)
+        await frame.wait_for_load_state("networkidle")
         return frame
 
     def _find_commons_frame(self, page: Page) -> Frame | None:
@@ -211,8 +210,16 @@ class SSUProvider:
         try:
             expand_btn = await frame.query_selector('text="모두 펼치기"')
             if expand_btn:
+                # 펼치기 전 현재 강의 아이템 수 기록
+                count_before = await frame.evaluate(
+                    "() => document.querySelectorAll('.xnmb-module_item-outer-wrapper').length"
+                )
                 await expand_btn.click()
-                await asyncio.sleep(2)
+                # DOM에 새 아이템이 추가될 때까지 대기 (최대 10초)
+                await frame.wait_for_function(
+                    f"() => document.querySelectorAll('.xnmb-module_item-outer-wrapper').length > {count_before}",
+                    timeout=10000,
+                )
                 logger.info("전체 주차 펼침")
         except Exception:
             pass
