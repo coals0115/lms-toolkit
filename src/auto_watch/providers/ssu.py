@@ -127,13 +127,29 @@ class SSUProvider:
 
     # ── iframe 헬퍼 ─────────────────────────────────────────
 
-    async def _get_tool_content_frame(self, page: Page, timeout: int = 15000) -> Frame:
+    async def _get_tool_content_frame(self, page: Page, timeout: int = 30000) -> Frame:
         """tool_content iframe의 Frame 객체를 반환"""
+        # iframe 자체가 LTI launch로 비동기 생성되므로 넉넉히 대기
         await page.wait_for_selector("#tool_content", timeout=timeout)
         frame = page.frame("tool_content")
         if not frame:
             raise BrowserError("tool_content frame not found")
-        await frame.wait_for_load_state("networkidle")
+        # iframe 내부 AJAX 콘텐츠 로드 대기 (JS 폴링)
+        # 주의: "모두 접기"는 빈 상태에서도 보이므로 조건에서 제외
+        await frame.wait_for_function(
+            """() => {
+                // 주차학습 페이지: 강의 아이템 또는 "모두 펼치기" 버튼
+                if (document.querySelector('.xnmb-module_item-outer-wrapper')) return true;
+                const btns = document.querySelectorAll('button');
+                for (const b of btns) {
+                    if (b.textContent.includes('모두 펼치기')) return true;
+                }
+                // 마이페이지: 과목 컨테이너
+                if (document.querySelector('.xn-student-course-container')) return true;
+                return false;
+            }""",
+            timeout=timeout,
+        )
         return frame
 
     def _find_commons_frame(self, page: Page) -> Frame | None:
@@ -199,10 +215,10 @@ class SSUProvider:
         """과목의 주차학습 페이지에서 강의 목록 반환"""
         url = f"{self._base_url}/courses/{course_id}/external_tools/71"
         logger.info("주차학습 페이지 로드 중... (course %s)", course_id)
-        await page.goto(url, wait_until="networkidle")
+        await page.goto(url, wait_until="load")
         await self._sso_login_if_needed(page)
         if "external_tools/71" not in page.url:
-            await page.goto(url, wait_until="networkidle")
+            await page.goto(url, wait_until="load")
 
         frame = await self._get_tool_content_frame(page)
 
@@ -210,15 +226,10 @@ class SSUProvider:
         try:
             expand_btn = await frame.query_selector('text="모두 펼치기"')
             if expand_btn:
-                # 펼치기 전 현재 강의 아이템 수 기록
-                count_before = await frame.evaluate(
-                    "() => document.querySelectorAll('.xnmb-module_item-outer-wrapper').length"
-                )
                 await expand_btn.click()
-                # DOM에 새 아이템이 추가될 때까지 대기 (최대 10초)
-                await frame.wait_for_function(
-                    f"() => document.querySelectorAll('.xnmb-module_item-outer-wrapper').length > {count_before}",
-                    timeout=10000,
+                # 클릭 후 강의 아이템이 나타날 때까지 대기 (최대 10초)
+                await frame.wait_for_selector(
+                    ".xnmb-module_item-outer-wrapper", timeout=10000
                 )
                 logger.info("전체 주차 펼침")
         except Exception:
@@ -318,7 +329,7 @@ class SSUProvider:
 
     async def _enter_lecture_page(self, page: Page, lecture: Lecture) -> Frame | None:
         """강의 페이지 진입 → iframe 대기 → 이어보기 처리 → commons frame 반환"""
-        await page.goto(lecture["href"], wait_until="networkidle")
+        await page.goto(lecture["href"], wait_until="load")
 
         tool_frame = await self._get_tool_content_frame(page)
         await tool_frame.wait_for_selector(".xnlailvc-commons-frame", timeout=IFRAME_TIMEOUT_MS)
