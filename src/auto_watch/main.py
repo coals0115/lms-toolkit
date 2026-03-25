@@ -30,18 +30,10 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
         logger.info("미수강 동영상이 없습니다!")
         return
 
-    # 과목별 강의 목록을 병렬로 로딩 (탭 분리)
-    async def _fetch(course: Course) -> list:
-        new_page = await page.context.new_page()
-        try:
-            return await provider.get_lectures(
-                new_page, course["courseId"], course["name"]
-            )
-        finally:
-            await new_page.close()
-
-    results = await asyncio.gather(*[_fetch(c) for c in target_courses])
-    all_lectures = [lec for batch in results for lec in batch]
+    all_lectures = []
+    for course in target_courses:
+        lectures = await provider.get_lectures(page, course["courseId"], course["name"])
+        all_lectures.extend(lectures)
 
     if not all_lectures:
         logger.info("강의 없음!")
@@ -103,20 +95,10 @@ async def _run_download_mode(
             logger.info("선택 없음. 종료.")
             return
 
-        # 과목별 강의 목록을 병렬로 로딩 (탭 분리)
-        async def _fetch_lectures(course: Course) -> list:
-            new_page = await page.context.new_page()
-            try:
-                return await provider.get_lectures(
-                    new_page, course["courseId"], course["name"]
-                )
-            finally:
-                await new_page.close()
-
-        results = await asyncio.gather(
-            *[_fetch_lectures(c) for c in selected_courses]
-        )
-        all_lectures = [lec for batch in results for lec in batch]
+        all_lectures = []
+        for course in selected_courses:
+            lectures = await provider.get_lectures(page, course["courseId"], course["name"])
+            all_lectures.extend(lectures)
 
         if not all_lectures:
             logger.info("강의 없음!")
