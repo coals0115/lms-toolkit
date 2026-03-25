@@ -146,6 +146,9 @@ class SSUProvider:
                 }
                 // 마이페이지: 과목 컨테이너
                 if (document.querySelector('.xn-student-course-container')) return true;
+                // 강의 개별 페이지: commons 플레이어 iframe 또는 출석 상태 텍스트
+                if (document.querySelector('.xnlailvc-commons-frame')) return true;
+                if (document.body?.innerText?.includes('출석 인정')) return true;
                 return false;
             }""",
             timeout=timeout,
