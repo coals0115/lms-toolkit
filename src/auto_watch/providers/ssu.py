@@ -176,9 +176,8 @@ class SSUProvider:
 
         frame = await self._get_tool_content_frame(page)
 
-        # 과목 컨테이너 + todo 카운트가 모두 렌더링될 때까지 대기
-        # React 렌더링 순서: (1) 컨테이너+과목명 → (2) todo 구조(0값) → (3) AJAX로 실제 카운트
-        # 컨테이너 출현 후 iframe networkidle 대기로 모든 AJAX 완료 보장
+        # todo 카운트가 별도 AJAX로 로드되어 컨테이너 출현 시점에 0일 수 있음
+        # networkidle로 todo AJAX 완료까지 대기
         await frame.wait_for_selector(".xn-student-course-container", timeout=15000)
         await page.wait_for_load_state("networkidle")
 
@@ -234,19 +233,11 @@ class SSUProvider:
         frame = await self._get_tool_content_frame(page)
 
         # "모두 펼치기" 클릭하여 전체 주차 확장
-        # JS 직접 클릭 사용 (Canvas breadcrumb 오버레이가 iframe 버튼을 가림)
+        # dispatch_event: Canvas breadcrumb 오버레이가 iframe 버튼 클릭을 가로채는 문제 우회
         try:
-            clicked = await frame.evaluate("""() => {
-                const btns = document.querySelectorAll('button');
-                for (const b of btns) {
-                    if (b.textContent.includes('모두 펼치기')) {
-                        b.click();
-                        return true;
-                    }
-                }
-                return false;
-            }""")
-            if clicked:
+            expand_btn = await frame.query_selector('text="모두 펼치기"')
+            if expand_btn:
+                await expand_btn.dispatch_event("click")
                 await frame.wait_for_selector(
                     ".xnmb-module_item-outer-wrapper", timeout=10000
                 )
