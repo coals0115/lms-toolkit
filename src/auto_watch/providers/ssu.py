@@ -19,6 +19,7 @@ from ..config import (
 from ..exceptions import BrowserError, LoginError
 from ..transcription import download_and_transcribe
 from ..types import Course, Lecture, ProcessResult, TranscriptResult
+from ..util import format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -287,13 +288,25 @@ class SSUProvider:
                         deadline = new Date(now.getFullYear(), parseInt(endMatch[1]) - 1, parseInt(endMatch[2]));
                     }
 
-                    const allTimes = [...text.matchAll(/(\\d+):(\\d{2})(?!\\d)/g)];
+                    // H:MM:SS 우선 매칭 (1시간 이상 영상). 없으면 M:SS로 fallback.
                     let durationSec = 0;
-                    for (const m of allTimes) {
-                        const mins = parseInt(m[1]);
-                        const secs = parseInt(m[2]);
-                        if (secs < 60 && mins >= 1 && mins <= 180) {
-                            durationSec = mins * 60 + secs;
+                    const hmsMatches = [...text.matchAll(/(?<!\\d)(\\d{1,2}):(\\d{2}):(\\d{2})(?!\\d)/g)];
+                    for (const m of hmsMatches) {
+                        const h = parseInt(m[1]);
+                        const mins = parseInt(m[2]);
+                        const secs = parseInt(m[3]);
+                        if (h >= 0 && h < 24 && mins < 60 && secs < 60) {
+                            durationSec = h * 3600 + mins * 60 + secs;
+                        }
+                    }
+                    if (durationSec === 0) {
+                        const msMatches = [...text.matchAll(/(?<!\\d)(\\d+):(\\d{2})(?!\\d)/g)];
+                        for (const m of msMatches) {
+                            const mins = parseInt(m[1]);
+                            const secs = parseInt(m[2]);
+                            if (secs < 60 && mins >= 1 && mins <= 180) {
+                                durationSec = mins * 60 + secs;
+                            }
                         }
                     }
 
@@ -321,9 +334,8 @@ class SSUProvider:
             "강의 %d개 (미수강 %d / 수강완료 %d)", len(lectures), len(unwatched), len(completed)
         )
         for lec in lectures:
-            m, s = divmod(lec["durationSec"], 60)
             status = "V" if lec["isCompleted"] else " "
-            logger.info("  %s %s (%d:%02d)", status, lec["title"], m, s)
+            logger.info("  %s %s (%s)", status, lec["title"], format_duration(lec["durationSec"]))
 
         return lectures
 
@@ -469,19 +481,14 @@ class SSUProvider:
                     if progress["duration"]
                     else 0
                 )
-                cur_m, cur_s = divmod(int(progress["currentTime"]), 60)
-                dur_m, dur_s = divmod(int(progress["duration"]), 60)
-
                 if (
                     progress["currentTime"] - last_log_time >= PLAYBACK_LOG_INTERVAL_SEC
                     or pct >= 99
                 ):
                     logger.info(
-                        "[%d:%02d / %d:%02d] %.1f%% | %sx",
-                        cur_m,
-                        cur_s,
-                        dur_m,
-                        dur_s,
+                        "[%s / %s] %.1f%% | %sx",
+                        format_duration(progress["currentTime"]),
+                        format_duration(progress["duration"]),
                         pct,
                         progress["rate"],
                     )
@@ -519,12 +526,11 @@ class SSUProvider:
         course_name = lecture.get("courseName", "unknown")
         is_completed = lecture.get("isCompleted", False)
 
-        m, s = divmod(duration_sec, 60)
         print(f"\n{'─' * 50}")
         if is_completed:
             logger.info("[DL] %s (수강완료 — 다운로드만)", title)
         else:
-            logger.info("[PLAY] %s (%d:%02d)", title, m, s)
+            logger.info("[PLAY] %s (%s)", title, format_duration(duration_sec))
         print(f"{'─' * 50}")
 
         commons = await self._enter_lecture_page(page, lecture)

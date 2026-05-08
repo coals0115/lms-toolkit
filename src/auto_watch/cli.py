@@ -5,6 +5,7 @@ from collections import OrderedDict
 from datetime import datetime
 
 from .config import SCHOOL_CONFIGS
+from .util import format_duration
 
 
 def select_school() -> str:
@@ -122,15 +123,6 @@ def select_courses(courses: list[dict]) -> list[dict]:
             print("  숫자, all, b, q 중 하나를 입력하세요.")
 
 
-def _format_duration(total_sec: int) -> str:
-    """초를 H:MM:SS 또는 M:SS 형식으로 변환"""
-    total_m, total_s = divmod(total_sec, 60)
-    total_h, total_m = divmod(total_m, 60)
-    if total_h:
-        return f"{total_h}:{total_m:02d}:{total_s:02d}"
-    return f"{total_m}:{total_s:02d}"
-
-
 def _group_by_course(lectures: list[dict]) -> OrderedDict:
     """강의를 과목별로 그룹핑 (입력 순서 유지)"""
     groups = OrderedDict()  # type: OrderedDict[str, list[dict]]
@@ -178,7 +170,6 @@ def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
 
         for lec in items:
             is_done = lec.get("isCompleted", False)
-            m, s = divmod(lec["durationSec"], 60)
             total_sec += lec["durationSec"]
             if not is_done:
                 unwatched_sec += lec["durationSec"]
@@ -198,7 +189,8 @@ def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
                 days_left = (deadline_dt - today).days
                 d_day = f" D-{days_left}" if days_left >= 0 else f" D+{abs(days_left)}"
 
-            print(f"  [{idx:2d}] {status}  {lec['title']} ({m}:{s:02d}){d_day}")
+            dur = format_duration(lec["durationSec"])
+            print(f"  [{idx:2d}] {status}  {lec['title']} ({dur}){d_day}")
 
         # 접힌 상태: 수강완료 요약
         if not expanded and course_completed:
@@ -206,11 +198,11 @@ def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
 
     # 재생시간
     if expanded:
-        total_fmt = _format_duration(total_sec)
-        unwatched_fmt = _format_duration(unwatched_sec)
+        total_fmt = format_duration(total_sec)
+        unwatched_fmt = format_duration(unwatched_sec)
         print(f"\n  총 재생시간: {total_fmt} (미수강: {unwatched_fmt})")
     else:
-        print(f"\n  총 재생시간: {_format_duration(unwatched_sec)} (미수강)")
+        print(f"\n  총 재생시간: {format_duration(unwatched_sec)} (미수강)")
 
     # 미수강 0개 안내 (접힌 상태에서만 — 펼친 상태에서는 이미 전체 보임)
     if not unwatched and not expanded:

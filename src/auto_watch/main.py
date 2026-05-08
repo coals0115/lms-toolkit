@@ -18,6 +18,7 @@ from .log import setup_logging
 from .plugin import discover_plugins
 from .provider import LMSProvider, get_provider
 from .types import Course
+from .util import format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +48,7 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
         return
 
     sel_total = sum(lec["durationSec"] for lec in selected)
-    sel_m, sel_s = divmod(sel_total, 60)
-    logger.info("%d개 선택, 총 %d:%02d", len(selected), sel_m, sel_s)
+    logger.info("%d개 선택, 총 %s", len(selected), format_duration(sel_total))
 
     watch_completed = 0
     download_only = 0
@@ -112,8 +112,7 @@ async def _run_download_mode(
             return
 
         sel_total = sum(lec["durationSec"] for lec in selected)
-        sel_m, sel_s = divmod(sel_total, 60)
-        logger.info("%d개 선택, 총 %d:%02d", len(selected), sel_m, sel_s)
+        logger.info("%d개 선택, 총 %s", len(selected), format_duration(sel_total))
 
         for i, lecture in enumerate(selected, 1):
             print(f"\n[{i}/{len(selected)}]", end=" ")
