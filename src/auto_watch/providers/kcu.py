@@ -16,6 +16,7 @@ from ..config import (
 from ..exceptions import LoginError
 from ..transcription import download_and_transcribe
 from ..types import Course, Lecture, ProcessResult, TranscriptResult
+from ..util import format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -356,8 +357,7 @@ class KCUProvider:
         )
         for lec in lectures:
             status = "V" if lec["isCompleted"] else " "
-            m, s = divmod(lec["durationSec"], 60)
-            logger.info("  %s %s (%d:%02d)", status, lec["title"], m, s)
+            logger.info("  %s %s (%s)", status, lec["title"], format_duration(lec["durationSec"]))
 
         return lectures
 
@@ -573,19 +573,14 @@ class KCUProvider:
                     if progress["duration"]
                     else 0
                 )
-                cur_m, cur_s = divmod(int(progress["currentTime"]), 60)
-                dur_m, dur_s = divmod(int(progress["duration"]), 60)
-
                 if (
                     progress["currentTime"] - last_log_time >= PLAYBACK_LOG_INTERVAL_SEC
                     or pct >= 99
                 ):
                     logger.info(
-                        "[%d:%02d / %d:%02d] %.1f%% | %sx",
-                        cur_m,
-                        cur_s,
-                        dur_m,
-                        dur_s,
+                        "[%s / %s] %.1f%% | %sx",
+                        format_duration(progress["currentTime"]),
+                        format_duration(progress["duration"]),
                         pct,
                         progress["rate"],
                     )
@@ -628,12 +623,11 @@ class KCUProvider:
         is_completed = lecture.get("isCompleted", False)
         lect_meta = json.loads(lecture["href"])
 
-        m, s = divmod(duration_sec, 60)
         print(f"\n{'=' * 50}")
         if is_completed:
             logger.info("[DL] %s (수강완료 - 다운로드만)", title)
         else:
-            logger.info("[PLAY] %s (%d:%02d)", title, m, s)
+            logger.info("[PLAY] %s (%s)", title, format_duration(duration_sec))
         print(f"{'=' * 50}")
 
         # 1. lectRoom에 POST로 진입
