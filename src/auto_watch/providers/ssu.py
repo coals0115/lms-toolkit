@@ -3,7 +3,6 @@
 import asyncio
 import contextlib
 import logging
-from datetime import datetime
 
 from playwright.async_api import Frame, Page, Request
 
@@ -11,7 +10,7 @@ from ..config import (
     LOGIN_TIMEOUT_MS,
     PLAYBACK_COMPLETION_THRESHOLD,
     PLAYBACK_LOG_INTERVAL_SEC,
-    PLAYBACK_TIMEOUT_BUFFER_SEC,
+    PLAYBACK_STALL_NUDGE_SEC,
     RESUME_DIALOG_POST_PLAY_TIMEOUT_MS,
     SELECTOR_TIMEOUT_MS,
     SchoolConfig,
@@ -19,7 +18,7 @@ from ..config import (
 from ..exceptions import BrowserError, LoginError
 from ..transcription import download_and_transcribe
 from ..types import Course, Lecture, ProcessResult, TranscriptResult
-from ..util import format_duration
+from ..util import PlaybackWatchdog, format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -476,13 +475,10 @@ class SSUProvider:
 
     async def _monitor_playback(self, commons: Frame, title: str, duration_sec: int) -> bool:
         """재생 진행 모니터링. 수강 완료 시 True 반환."""
-        start_time = datetime.now()
-        timeout_sec = duration_sec + PLAYBACK_TIMEOUT_BUFFER_SEC
+        watchdog = PlaybackWatchdog(duration_sec)
         last_log_time = 0.0
 
         while True:
-            elapsed = (datetime.now() - start_time).total_seconds()
-
             try:
                 progress = await commons.evaluate("""
                     () => {
@@ -503,6 +499,8 @@ class SSUProvider:
                 """)
             except Exception:
                 progress = None
+
+            watchdog.update(progress["currentTime"] if progress else None)
 
             if progress:
                 pct = (
@@ -528,20 +526,30 @@ class SSUProvider:
                     await asyncio.sleep(3)
                     return True
 
+                # 버퍼링 스톨은 paused=false인 채로 위치만 멈추므로 둘 다 본다
+                stalled_sec = watchdog.stalled_sec
                 if progress["paused"] and progress["currentTime"] > 1:
-                    logger.warning("일시정지 감지 (%.1f%%), 재개 시도...", pct)
+                    nudge_reason = "일시정지 감지"
+                elif stalled_sec >= PLAYBACK_STALL_NUDGE_SEC:
+                    nudge_reason = f"재생 정체 {stalled_sec:.0f}s"
+                else:
+                    nudge_reason = None
+
+                if nudge_reason:
+                    logger.warning("%s (%.1f%%), 재개 시도...", nudge_reason, pct)
                     with contextlib.suppress(Exception):
                         await commons.evaluate("""
                             () => {
                                 const videos = document.querySelectorAll('video');
                                 for (const v of videos) {
-                                    if (v.duration > 10 && v.paused) v.play();
+                                    if (v.duration > 10) v.play();
                                 }
                             }
                         """)
 
-            if elapsed > timeout_sec:
-                logger.warning("타임아웃 (%.0fs). 다음 강의로 이동.", elapsed)
+            give_up = watchdog.give_up_reason()
+            if give_up:
+                logger.warning("%s — 다음 강의로 이동.", give_up)
                 return False
 
             await asyncio.sleep(5)
