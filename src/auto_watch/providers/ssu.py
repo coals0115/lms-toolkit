@@ -23,6 +23,17 @@ from ..util import format_duration
 
 logger = logging.getLogger(__name__)
 
+# SSO 로그인 폼에 도달하기까지 거쳐야 하는 중간 선택 페이지의 링크들.
+# 앞에 있는 것부터 시도하므로 최종 목적지(smartid)에 가까운 순서로 둔다.
+#   1) xn-sso/login.php          → "통합 로그인"
+#   2) canvas-discovery/login.php → "숭실대학교" (입학사정관 ao.ssu.ac.kr 은 제외)
+#   3) 구 Canvas 로그인 버튼 (하위호환)
+LOGIN_CHAIN_SELECTORS = (
+    'a[href*="smartid.ssu.ac.kr/Symtra_sso/smln.asp"]',
+    'a[href*="lms.ssu.ac.kr/xn-sso/gw.php"]',
+    ".login_btn a",
+)
+
 
 class SSUProvider:
     def __init__(self, config: SchoolConfig):
@@ -56,6 +67,30 @@ class SSUProvider:
         if "external_tools/67" not in page.url:
             await page.goto(self._mypage_url, wait_until="networkidle")
 
+    async def _goto_sso_form(self, page: Page) -> None:
+        """중간 선택 페이지를 거쳐 SSO 로그인 폼(smartid)까지 이동
+
+        SSU는 로그인 앞단에 선택 페이지를 두며 구성이 바뀔 수 있어,
+        클래스 대신 href로 링크를 찾아 폼이 나올 때까지 단계를 따라간다.
+        """
+        for _ in range(len(LOGIN_CHAIN_SELECTORS) + 1):
+            if await page.query_selector("input#userid"):
+                return
+
+            for selector in LOGIN_CHAIN_SELECTORS:
+                link = await page.query_selector(selector)
+                if not link:
+                    continue
+                logger.info("로그인 단계 이동 — %s", selector)
+                await link.click()
+                await page.wait_for_load_state("networkidle")
+                break
+            else:
+                # 따라갈 링크가 없음 → 폼이 있거나 아래 wait_for_selector에서 실패
+                break
+
+        await page.wait_for_selector("input#userid", timeout=LOGIN_TIMEOUT_MS)
+
     async def _sso_login_if_needed(self, page: Page) -> None:
         """현재 페이지가 로그인 페이지면 SSO 로그인 수행"""
         if "login" not in page.url and "smartid" not in page.url:
@@ -63,14 +98,8 @@ class SSUProvider:
 
         logger.info("로그인 필요 — %s", page.url)
 
-        # Canvas 로그인 페이지 → SSO 버튼 클릭
-        login_btn = await page.query_selector(".login_btn a")
-        if login_btn:
-            await login_btn.click()
-            await page.wait_for_load_state("networkidle")
-
-        # SSO 로그인 폼 입력
-        await page.wait_for_selector("input#userid", timeout=LOGIN_TIMEOUT_MS)
+        # 중간 선택 페이지들을 통과해 SSO 로그인 폼까지 이동
+        await self._goto_sso_form(page)
 
         userid, password = self.get_credentials()
 
