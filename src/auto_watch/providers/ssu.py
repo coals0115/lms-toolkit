@@ -283,7 +283,7 @@ class SSUProvider:
 
                     const iconEl = item.querySelector('i.xnmb-module_item-icon');
                     const iconClasses = iconEl ? iconEl.className : '';
-                    const isVideo = iconClasses.includes('movie') || iconClasses.includes('readystream');
+                    const isVideo = ['movie', 'readystream', 'mp4'].some(k => iconClasses.includes(k));
                     const itemType = isVideo ? 'movie'
                         : iconClasses.includes('file') ? 'file'
                         : iconClasses.includes('assignment') ? 'assignment'
