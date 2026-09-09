@@ -138,7 +138,7 @@ output/
 
 - **언어**: Python 3.11+
 - **브라우저 자동화**: Playwright (headed, Chromium)
-- **음성→텍스트**: faster-whisper (CTranslate2, 로컬)
+- **음성→텍스트**: mlx-whisper (Apple GPU) / faster-whisper (CTranslate2, CPU 폴백), 로컬
 - **자동화 트리거**: OpenClaw (cron + 텔레그램)
 - **기존 코드**: lms-toolkit 레포 (Playwright, faster-whisper 이미 셋업됨)
 

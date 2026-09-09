@@ -13,6 +13,7 @@ dependencies = [
     "google-genai>=1.0.0",
     "pyperclip>=1.9.0",
     "truststore>=0.10.4",
+    "mlx-whisper>=0.4.3",
 ]
 
 [project.scripts]

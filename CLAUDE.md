@@ -43,6 +43,8 @@ CHROME_PATH=(선택, Chrome 경로 오버라이드)
 - **headed 브라우저 필수**: 헤드리스면 LTI 플레이어 완료 이벤트 미발생
 - **Chrome 경로**: 기본 `/Applications/Google Chrome.app/`, `CHROME_PATH` 환경변수로 오버라이드 가능
 - **Whisper 모델 캐시**: `~/.cache/huggingface/hub/` (~1.5GB)
+- **전사 엔진**: Apple Silicon은 mlx-whisper(GPU), 그 외는 faster-whisper(CPU) 폴백.
+  CTranslate2에 Metal 백엔드가 없어 faster-whisper는 GPU를 못 쓴다 (실측 2.5배속 vs 13배속)
 - 출력: `output/과목명/` 에 `.mp4` + `.txt` 저장. WAV는 전사 후 자동 삭제
 - **로깅**: 시스템 로그는 stderr (logging 모듈), CLI 대면 출력만 stdout (print)
 

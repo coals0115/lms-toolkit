@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import platform
 import time
 from abc import ABC, abstractmethod
 
@@ -31,12 +32,28 @@ class Transcriber(ABC):
         pass
 
 
+# CTranslate2에 Metal 백엔드가 없어 faster-whisper는 Apple GPU를 못 쓴다.
+# 같은 오디오 기준 CPU 2.5배속 → mlx 13배속이라 arm64에서는 mlx를 우선한다.
+MLX_REPO = "mlx-community/whisper-large-v3-turbo"
+
+
 class WhisperTranscriber(Transcriber):
     def __init__(self, model_name: str = "turbo") -> None:
         import sys
 
         device = "cpu"
         compute_type = "int8"
+
+        self._use_mlx = False
+        if platform.machine() == "arm64" and not getattr(sys, "frozen", False):
+            try:
+                import mlx_whisper  # noqa: F401
+
+                self._use_mlx = True
+                logger.info("mlx-whisper 사용 (Apple GPU)")
+                return
+            except ImportError:
+                logger.warning("mlx-whisper 없음 — faster-whisper(CPU)로 대체")
 
         # .app 번들 내부의 모델 확인
         if getattr(sys, "frozen", False):
@@ -50,6 +67,10 @@ class WhisperTranscriber(Transcriber):
         self.model = WhisperModel(model_name, device=device, compute_type=compute_type)
 
     def transcribe(self, wav_path: str, txt_path: str) -> None:
+        if self._use_mlx:
+            self._transcribe_mlx(wav_path, txt_path)
+            return
+
         segments, info = self.model.transcribe(wav_path, language="ko", beam_size=5)
         duration = info.duration
 
@@ -76,6 +97,15 @@ class WhisperTranscriber(Transcriber):
             f.write(text)
         logger.info("Whisper 변환 완료: %s", txt_path)
         logger.info("감지된 언어: %s (확률: %.2f)", info.language, info.language_probability)
+
+    def _transcribe_mlx(self, wav_path: str, txt_path: str) -> None:
+        import mlx_whisper
+
+        result = mlx_whisper.transcribe(wav_path, path_or_hf_repo=MLX_REPO, language="ko")
+        text = result["text"]
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        logger.info("Whisper 변환 완료: %s", txt_path)
 
 
 class ReturnZeroTranscriber(Transcriber):

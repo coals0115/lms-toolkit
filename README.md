@@ -147,7 +147,7 @@ src/
 │   └── cli.py                 # CLI UI + 유틸리티
 └── audio_pipeline/
     ├── converter.py           # MP4 → WAV (ffmpeg)
-    └── transcriber.py         # WAV → TXT (faster-whisper)
+    └── transcriber.py         # WAV → TXT (mlx-whisper / faster-whisper)
 ```
 
 ## 사용 기술
@@ -155,7 +155,7 @@ src/
 | 역할 | 기술 |
 |------|------|
 | LMS 자동화 | Playwright (Chromium) |
-| 음성 인식 | faster-whisper (turbo 모델, CPU int8) |
+| 음성 인식 | mlx-whisper (Apple GPU) / faster-whisper (CPU int8) |
 | AI 요약 | Google Gemini API (예정) |
 
 ## 트러블슈팅
@@ -166,9 +166,11 @@ src/
 uv run python -m playwright install chromium
 ```
 
-### faster-whisper 모델
+### Whisper 모델
 
 첫 실행 시 turbo 모델(~1.5GB)을 HuggingFace에서 자동 다운로드합니다. 네트워크 연결을 확인하세요.
+
+Apple Silicon에서는 GPU를 쓰는 mlx-whisper로 전사합니다(실측 13배속). 그 외 환경은 faster-whisper(CPU, 2.5배속)로 자동 대체됩니다.
 
 ### ModuleNotFoundError
 
