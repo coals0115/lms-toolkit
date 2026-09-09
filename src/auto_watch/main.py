@@ -8,6 +8,7 @@ import logging
 import sys
 from datetime import datetime
 
+import truststore
 from playwright.async_api import Page, async_playwright
 
 from .browser import setup_browser
@@ -69,6 +70,7 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
     # 백그라운드 다운로드/전사 완료 대기
     transcript_results = await provider.drain_tasks()
     transcribed = sum(1 for r in transcript_results if r.get("txt"))
+    download_failed = sum(1 for r in transcript_results if not r.get("mp4"))
 
     print(f"\n{'═' * 40}")
     print("  완료!")
@@ -80,6 +82,8 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
         print(f"  스크립트: {transcribed}개 추출 → output/")
     if watch_failed:
         print(f"  수강 실패: {watch_failed}개")
+    if download_failed:
+        print(f"  다운로드 실패: {download_failed}개 (로그 확인)")
     print(f"{'═' * 40}")
 
 
@@ -125,12 +129,16 @@ async def _run_download_mode(
         logger.info("다운로드/전사 완료 대기 중...")
         transcript_results = await provider.drain_tasks()
         transcribed = sum(1 for r in transcript_results if r.get("txt"))
+        downloaded = sum(1 for r in transcript_results if r.get("mp4"))
+        failed = len(selected) - downloaded
 
         print(f"\n{'═' * 40}")
         print("  완료!")
-        print(f"  다운로드: {len(selected)}개")
+        print(f"  다운로드: {downloaded}개")
         if transcribed:
             print(f"  스크립트: {transcribed}개 추출 → output/")
+        if failed:
+            print(f"  실패: {failed}개 (로그 확인)")
         print(f"{'═' * 40}")
         break
 
@@ -150,6 +158,10 @@ def cli_entry() -> None:
 
 
 async def main() -> None:
+    # requests는 certifi 번들만 신뢰해 사내망 TLS 검사 프록시 인증서를 거부한다.
+    # OS 신뢰 저장소를 쓰게 해야 영상 CDN 다운로드가 된다.
+    truststore.inject_into_ssl()
+
     setup_logging()
     plugins = discover_plugins()
     args = _parse_args(plugins)
