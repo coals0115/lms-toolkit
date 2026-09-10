@@ -1,23 +1,10 @@
-"""cli.py 순수 함수 단위 테스트"""
+"""순수 함수 단위 테스트"""
 
-from src.auto_watch.cli import _format_duration, _is_target_video_url, _safe_filename
+from src.auto_watch.cli import _safe_filename
+from src.auto_watch.config import SCHOOL_CONFIGS
+from src.auto_watch.providers.ssu import SSUProvider
 
-
-class TestFormatDuration:
-    def test_seconds_only(self):
-        assert _format_duration(45) == "0:45"
-
-    def test_minutes_and_seconds(self):
-        assert _format_duration(125) == "2:05"
-
-    def test_hours(self):
-        assert _format_duration(3661) == "1:01:01"
-
-    def test_zero(self):
-        assert _format_duration(0) == "0:00"
-
-    def test_exact_hour(self):
-        assert _format_duration(3600) == "1:00:00"
+_is_target_video_url = SSUProvider(SCHOOL_CONFIGS["ssu"])._is_target_video_url
 
 
 class TestIsTargetVideoUrl:
