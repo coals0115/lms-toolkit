@@ -31,6 +31,13 @@ _DEFAULT_DURATION_SEC = 1800  # 30분 기본값 (API에서 재생시간 미제�
 _MAX_WEEKS = 15
 
 
+def _format_open_date(bgng_dt: str) -> str:
+    """data-bgng-dt("202609141400") → "09-14 오픈" """
+    if len(bgng_dt) < 8:
+        return "미정"
+    return f"{bgng_dt[4:6]}-{bgng_dt[6:8]} 오픈"
+
+
 class KCUProvider:
     def __init__(self, config: SchoolConfig):
         self._config = config
@@ -213,36 +220,37 @@ class KCUProvider:
         logger.info("profId(empno): %s", prof_id or "(미확인)")
         return prof_id
 
-    async def _get_available_weeks(self, page: Page) -> list[int]:
-        """lectRoom 주차목록에서 수강 가능한 주차 번호만 반환.
+    async def _get_available_weeks(self, page: Page) -> list[int] | None:
+        """lectRoom 주차목록에서 수강 가능한 주차만 반환 (None이면 파싱 실패).
 
-        주차 사이드바는 swiper 슬라이드 구조:
-        div.swiper-slide.weekNo 안에 <p> 태그로 "N주." 제목과
-        "미수강"/"강의 시작전" 등 상태 텍스트가 포함됨.
+        미개설 주차도 selectWeekLectInfo는 vdoUrl을 정상 반환하므로
+        API 응답만으로는 열림 여부를 알 수 없다. 사이드바에서
+        a.tit.weekInfo에 open 클래스가 붙은 주차만 실제로 재생 가능하다.
         """
-        weeks = await page.evaluate("""
-            () => {
-                const result = [];
-                const slides = document.querySelectorAll('.swiper-slide.weekNo');
-                for (const slide of slides) {
-                    const text = slide.textContent || '';
-                    const weekMatch = text.match(/(\\d+)주\\./);
-                    if (!weekMatch) continue;
-                    const weekNo = parseInt(weekMatch[1]);
-                    // "강의 시작전"이 포함되어 있으면 미개설
-                    if (text.includes('강의 시작전') || text.includes('강의시작전')) {
-                        continue;
-                    }
-                    result.push(weekNo);
-                }
-                return result;
-            }
+        slides = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('.swiper-slide.weekNo')).map(s => {
+                const a = s.querySelector('a.tit.weekInfo');
+                const t = s.querySelector('p.tit.weekInfo.time');
+                return {
+                    weekNo: parseInt((a && a.dataset.weekNo) || '0'),
+                    isOpen: !!(a && a.classList.contains('open')),
+                    begin: (t && t.dataset.bgngDt) || '',
+                };
+            }).filter(w => w.weekNo)
         """)
 
-        if weeks:
-            logger.info("수강 가능 주차: %s", weeks)
-        else:
+        if not slides:
             logger.warning("주차 목록 파싱 실패 — 전체 주차 시도")
+            return None
+
+        weeks = [s["weekNo"] for s in slides if s["isOpen"]]
+        closed = [s for s in slides if not s["isOpen"]]
+        logger.info("수강 가능 주차: %s", weeks)
+        if closed:
+            logger.info(
+                "미개설 주차 제외: %s",
+                ", ".join(f"{s['weekNo']}주({_format_open_date(s['begin'])})" for s in closed),
+            )
 
         return weeks
 
@@ -260,7 +268,7 @@ class KCUProvider:
 
         # 2. 수강 가능한 주차만 파싱
         available_weeks = await self._get_available_weeks(page)
-        target_weeks = available_weeks if available_weeks else range(1, _MAX_WEEKS + 1)
+        target_weeks = range(1, _MAX_WEEKS + 1) if available_weeks is None else available_weeks
 
         # 3. 주차별 강의 정보 API 호출
         lectures: list[Lecture] = []
