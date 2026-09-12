@@ -99,13 +99,22 @@ class WhisperTranscriber(Transcriber):
         logger.info("감지된 언어: %s (확률: %.2f)", info.language, info.language_probability)
 
     def _transcribe_mlx(self, wav_path: str, txt_path: str) -> None:
+        import mlx.core as mx
         import mlx_whisper
 
-        result = mlx_whisper.transcribe(wav_path, path_or_hf_repo=MLX_REPO, language="ko")
-        text = result["text"]
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(text)
-        logger.info("Whisper 변환 완료: %s", txt_path)
+        try:
+            result = mlx_whisper.transcribe(wav_path, path_or_hf_repo=MLX_REPO, language="ko")
+            text = result["text"]
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            logger.info("Whisper 변환 완료: %s", txt_path)
+        finally:
+            # mlx는 Metal 버퍼 풀을 스스로 반환하지 않는다. 자동 수강은 전사가 끝나도
+            # 브라우저 대기로 프로세스가 몇 시간 살아 있어, 안 지우면 그동안 계속 점유한다.
+            freed = mx.get_cache_memory()
+            mx.clear_cache()
+            if freed:
+                logger.info("GPU 캐시 반환: %.1fGB", freed / 1e9)
 
 
 class ReturnZeroTranscriber(Transcriber):
