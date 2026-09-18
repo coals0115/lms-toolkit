@@ -1,7 +1,26 @@
 import logging
 import platform
 
+from src.auto_watch.util import format_duration
+
 logger = logging.getLogger(__name__)
+
+PARAGRAPH_SEC = 30
+
+
+def format_paragraphs(segments: list[tuple[float, str]]) -> str:
+    """(시작초, 텍스트) 구간들을 약 30초 문단으로 묶고 문단마다 [시각]을 붙인다."""
+    paragraphs: list[tuple[float, list[str]]] = []
+    for start, text in segments:
+        text = text.strip()
+        if not text:
+            continue
+        if not paragraphs or start - paragraphs[-1][0] >= PARAGRAPH_SEC:
+            paragraphs.append((start, []))
+        paragraphs[-1][1].append(text)
+    return "\n".join(
+        f"[{format_duration(start)}]\n{' '.join(texts)}\n" for start, texts in paragraphs
+    )
 
 
 # CTranslate2에 Metal 백엔드가 없어 faster-whisper는 Apple GPU를 못 쓴다.
@@ -35,10 +54,10 @@ class WhisperTranscriber:
         segments, info = self.model.transcribe(audio_path, language="ko", beam_size=5)
         duration = info.duration
 
-        texts = []
+        collected: list[tuple[float, str]] = []
         last_report = 0
         for segment in segments:
-            texts.append(segment.text)
+            collected.append((segment.start, segment.text))
             if duration and segment.end - last_report >= 60:
                 pct = segment.end / duration * 100
                 seg_m, seg_s = divmod(int(segment.end), 60)
@@ -53,9 +72,8 @@ class WhisperTranscriber:
                 )
                 last_report = segment.end
 
-        text = "".join(texts)
         with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(text)
+            f.write(format_paragraphs(collected))
         logger.info("Whisper 변환 완료: %s", txt_path)
         logger.info("감지된 언어: %s (확률: %.2f)", info.language, info.language_probability)
 
@@ -65,9 +83,9 @@ class WhisperTranscriber:
 
         try:
             result = mlx_whisper.transcribe(audio_path, path_or_hf_repo=MLX_REPO, language="ko")
-            text = result["text"]
+            segments = [(seg["start"], seg["text"]) for seg in result["segments"]]
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(text)
+                f.write(format_paragraphs(segments))
             logger.info("Whisper 변환 완료: %s", txt_path)
         finally:
             # mlx는 Metal 버퍼 풀을 스스로 반환하지 않는다. 자동 수강은 전사가 끝나도
