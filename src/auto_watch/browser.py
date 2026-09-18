@@ -23,6 +23,8 @@ async def setup_browser(playwright, headless: bool = False) -> tuple[Page, Brows
     )
 
     page = await context.new_page()
+    page.set_default_navigation_timeout(90000)
+    page.set_default_timeout(90000)
     await page.add_init_script("""
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         window.chrome = { runtime: {} };
