@@ -169,25 +169,7 @@ class KCUProvider:
         }
 
         # JS로 form POST
-        await page.evaluate(
-            """
-            (params) => {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/atnlcSubj/lectRoom';
-                for (const [key, val] of Object.entries(params)) {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = key;
-                    input.value = val;
-                    form.appendChild(input);
-                }
-                document.body.appendChild(form);
-                form.submit();
-            }
-            """,
-            form_data,
-        )
+        await self._post_lect_room(page, form_data)
 
         await page.wait_for_load_state("networkidle")
         await asyncio.sleep(2)
@@ -395,29 +377,34 @@ class KCUProvider:
             "menuGrpCd": "new_SSJU",
         }
 
-        await page.evaluate(
-            """
-            (params) => {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/atnlcSubj/lectRoom';
-                for (const [key, val] of Object.entries(params)) {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = key;
-                    input.value = val;
-                    form.appendChild(input);
-                }
-                document.body.appendChild(form);
-                form.submit();
-            }
-            """,
-            form_data,
-        )
+        await self._post_lect_room(page, form_data)
 
         await page.wait_for_load_state("networkidle")
         await asyncio.sleep(3)
         logger.info("강의 페이지 로드 완료")
+
+    async def _post_lect_room(self, page: Page, form_data: dict[str, str]) -> None:
+        # submit 뒤 wait_for_load_state는 이전 문서가 이미 load 상태라 즉시 반환된다 → 이전 과목 DOM을 읽게 됨
+        async with page.expect_navigation(wait_until="domcontentloaded"):
+            await page.evaluate(
+                """
+                (params) => {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/atnlcSubj/lectRoom';
+                    for (const [key, val] of Object.entries(params)) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = key;
+                        input.value = val;
+                        form.appendChild(input);
+                    }
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+                """,
+                form_data,
+            )
 
     async def _wait_for_player_frame(self, page: Page) -> Frame | None:
         """cndIfram(플레이어 iframe) 로드 대기 후 Frame 반환"""
@@ -650,9 +637,7 @@ class KCUProvider:
         await self._navigate_to_lect_room(page, lect_meta)
 
         # 2. 스트림 URL 캡처를 위한 리스너 등록 + 플레이어 iframe 대기
-        stream_capture_task = asyncio.create_task(
-            self._capture_stream_url(page, timeout_sec=30)
-        )
+        stream_capture_task = asyncio.create_task(self._capture_stream_url(page, timeout_sec=30))
 
         player_frame = await self._wait_for_player_frame(page)
         if not player_frame:
