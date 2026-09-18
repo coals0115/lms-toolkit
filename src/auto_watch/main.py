@@ -18,10 +18,20 @@ from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .plugin import discover_plugins
 from .provider import LMSProvider, get_provider
-from .types import Course
+from .types import Course, Lecture, ProcessResult
 from .util import format_duration
 
 logger = logging.getLogger(__name__)
+
+
+async def _process_safely(
+    provider: LMSProvider, page: Page, lecture: Lecture
+) -> ProcessResult | None:
+    try:
+        return await provider.process_lecture(page, lecture, defer_transcript=True)
+    except Exception:
+        logger.exception("강의 처리 실패 — 다음 강의로 넘어감: %s", lecture.get("title"))
+        return None
 
 
 async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvider) -> str | None:
@@ -58,8 +68,10 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
 
     for i, lecture in enumerate(selected, 1):
         print(f"\n[{i}/{len(selected)}]", end=" ")
-        result = await provider.process_lecture(page, lecture, defer_transcript=True)
-        if result.get("download_only"):
+        result = await _process_safely(provider, page, lecture)
+        if result is None:
+            watch_failed += 1
+        elif result.get("download_only"):
             download_only += 1
         elif result["attended"]:
             watch_completed += 1
@@ -70,7 +82,7 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
     # 백그라운드 다운로드/전사 완료 대기
     transcript_results = await provider.drain_tasks()
     transcribed = sum(1 for r in transcript_results if r.get("txt"))
-    download_failed = sum(1 for r in transcript_results if not r.get("mp4"))
+    download_failed = len(selected) - sum(1 for r in transcript_results if r.get("mp4"))
 
     print(f"\n{'═' * 40}")
     print("  완료!")
@@ -121,7 +133,7 @@ async def _run_download_mode(
         for i, lecture in enumerate(selected, 1):
             print(f"\n[{i}/{len(selected)}]", end=" ")
             lecture["isCompleted"] = True
-            await provider.process_lecture(page, lecture, defer_transcript=True)
+            await _process_safely(provider, page, lecture)
             await asyncio.sleep(3)
 
         # 백그라운드 다운로드/전사 완료 대기
