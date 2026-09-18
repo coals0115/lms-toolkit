@@ -9,6 +9,7 @@
 - **다운로드 모드**: 과목 선택 → lazy 스캔 → 다운로드/전사만 (재생/출석 없음)
 - **movie 타입 필터**: 동영상 강의만 표시 (PDF/과제 자동 제외)
 - 재생과 동시에 **MP4 다운로드 + 음성→텍스트 전사** (병렬 처리)
+- 이미 받은 강의는 다시 받거나 전사하지 않음
 - KCU: 2배속 기본, 수강 가능 주차 자동 필터링
 
 ## 요구 사항
@@ -46,7 +47,6 @@ cd lms-toolkit
 brew install ffmpeg
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-uv run python -m playwright install chromium
 ```
 
 프로젝트 루트에 `.env` 파일 생성:
@@ -124,7 +124,17 @@ output/
     └── 7주차 강의.txt    # 전사된 스크립트
 ```
 
-> 중간에 생성되는 WAV 파일은 전사 완료 후 자동 삭제됩니다.
+스크립트는 약 30초 문단마다 영상 시각이 붙어 있어, 복습하다 해당 위치를 영상에서 바로 찾을 수 있습니다:
+
+```
+[0:00]
+3.4 해보시죠. 3.4는 특별한 행렬들이라 ...
+
+[0:30]
+n by n 행렬이에요 행과 열을 바꿔 놓은 겁니다 ...
+```
+
+> 같은 이름의 `.txt`가 이미 있으면 전사를 건너뜁니다. 다시 만들려면 `.txt`를 지우고 실행하세요.
 
 ## 프로젝트 구조
 
@@ -144,26 +154,27 @@ src/
 │   │   └── kcu.py             # 숭실사이버대 (KCU LMS)
 │   ├── plugin.py              # 플러그인 인프라 (entry_points 기반)
 │   ├── transcription.py       # 영상 다운로드 + 음성→텍스트 전사
+│   ├── util.py                # 시간 포맷, 재생 정체 감시, 영상 URL 캡처
 │   └── cli.py                 # CLI UI + 유틸리티
 └── audio_pipeline/
-    ├── converter.py           # MP4 → WAV (ffmpeg)
-    └── transcriber.py         # WAV → TXT (mlx-whisper / faster-whisper)
+    └── transcriber.py         # MP4 → TXT (mlx-whisper / faster-whisper)
 ```
 
 ## 사용 기술
 
 | 역할 | 기술 |
 |------|------|
-| LMS 자동화 | Playwright (Chromium) |
+| LMS 자동화 | Playwright + 시스템 Chrome |
 | 음성 인식 | mlx-whisper (Apple GPU) / faster-whisper (CPU int8) |
-| AI 요약 | Google Gemini API (예정) |
 
 ## 트러블슈팅
 
-### Playwright 브라우저
+### Chrome을 못 찾는 경우
 
-```bash
-uv run python -m playwright install chromium
+Playwright 번들 Chromium이 아니라 설치된 Google Chrome을 씁니다. 기본 경로(`/Applications/Google Chrome.app/`)가 아니라면 `.env`에 지정하세요:
+
+```
+CHROME_PATH=/path/to/Google Chrome.app/Contents/MacOS/Google Chrome
 ```
 
 ### Whisper 모델

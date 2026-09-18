@@ -1,7 +1,7 @@
 # LMS Auto-Watch & Transcript — Spec
 
 > 작성: 2026-03-02 20:42
-> 갱신: 2026-03-07
+> 갱신: 2026-09-18
 > 상태: M3.6 완료 — 멀티 LMS + KCU Provider 구현됨
 
 ## 한 줄 목적
@@ -48,7 +48,7 @@ $ python -m src.auto_watch
 과목을 먼저 선택 → 해당 과목만 lazy 스캔 → 다운로드/전사만 수행.
 
 ```
-번호 (1/2): 2
+번호 (1/2) / q(종료): 2
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   과목 8개:
@@ -58,7 +58,7 @@ $ python -m src.auto_watch
   [2] 감성지능리더십 (미수강 2개)
   ...
 
-번호 / all / q: 1
+번호 / all(전체) / b(이전) / q(종료): 1
 ```
 
 **흐름:**
@@ -88,12 +88,12 @@ $ python -m src.auto_watch --auto
 ```
 강의 재생 시작
   ├─ [출석] 1x 배속 재생 → 완료 이벤트 대기 → 출석 인정
-  └─ [스크립트] 영상 다운로드 → faster-whisper로 음성→텍스트 추출
+  └─ [스크립트] 영상 다운로드 → Whisper로 음성→텍스트 추출
 ```
 
 - **출석**: 브라우저에서 1x 재생. 서버가 누적 시간 추적하므로 끝까지 재생 필수
-- **스크립트 추출**: 영상 파일 다운로드 → faster-whisper (로컬, API 불필요)
-- **요약 (optional)**: Gemini 무료 tier 또는 수동으로 Claude에 붙여넣기. 핵심 스코프 아님
+- **스크립트 추출**: 영상 파일 다운로드 → mp4를 바로 Whisper로 전사 (로컬, API 불필요). Apple Silicon은 mlx-whisper(GPU), 그 외는 faster-whisper(CPU)
+- **이미 받은 강의**: `.mp4`가 있으면 다운로드, `.txt`가 있으면 전사를 건너뜀. 다시 만들려면 파일을 지운다
 
 ### 저장 경로
 
@@ -105,6 +105,16 @@ output/
 ```
 
 예: `output/자료구조/chap1_1.mp4`, `output/자료구조/chap1_1.txt`
+
+스크립트는 약 30초 문단마다 시작 시각을 붙인다:
+
+```
+[0:00]
+3.4 해보시죠. 3.4는 특별한 행렬들이라 ...
+
+[0:30]
+n by n 행렬이에요 행과 열을 바꿔 놓은 겁니다 ...
+```
 
 ## 성공 기준
 
@@ -129,7 +139,7 @@ output/
 
 ## 범위 밖 (Out of Scope)
 
-- LLM 요약 자동화 (스크립트 추출까지만. 요약은 수동)
+- LLM 요약 (스크립트 추출까지만. 요약 기능은 넣지 않기로 함 — 2026-09-18)
 - 과제/퀴즈 자동 제출
 - 실시간 강의 (Zoom 등) 자동 참석
 - 모바일 앱
@@ -137,15 +147,14 @@ output/
 ## 기술 스택
 
 - **언어**: Python 3.11+
-- **브라우저 자동화**: Playwright (headed, Chromium)
+- **브라우저 자동화**: Playwright (headed, 시스템 Chrome — `CHROME_PATH`)
 - **음성→텍스트**: mlx-whisper (Apple GPU) / faster-whisper (CTranslate2, CPU 폴백), 로컬
 - **자동화 트리거**: OpenClaw (cron + 텔레그램)
-- **기존 코드**: lms-toolkit 레포 (Playwright, faster-whisper 이미 셋업됨)
 
 ## 마일스톤
 
 1. **M1 — 수동 선택 재생**: CLI 목록 → 번호 선택 → 재생 → 출석 확인 ✅
-2. **M2 — 스크립트 추출 연결**: 재생 중 영상 다운로드 + faster-whisper 파이프라인 연결 ✅
+2. **M2 — 스크립트 추출 연결**: 재생 중 영상 다운로드 + Whisper 전사 파이프라인 연결 ✅
 3. **M2.5 — 수강완료 강의 다운로드**: 아래 상세 스펙 참고 ✅
 4. **M3 — watch/download 모드 분리**: 모드 선택 UI + movie 필터 + lazy 스캔 ✅
 5. **M3.5 — 멀티 LMS 구조**: LMSProvider Protocol 기반 + 학교 선택 메뉴 ✅
@@ -248,7 +257,7 @@ output/
 
   총 재생시간: 59:42 (미수강)
 
-번호 / all / q / e(펼치기):
+번호 / all(전체) / b(이전) / q(종료) / e(펼치기):
 ```
 
 **펼친 상태 (`e` 입력 후)**:
@@ -267,7 +276,7 @@ output/
 
   총 재생시간: 3:38:07 (미수강: 59:42)
 
-번호 / all / q:
+번호 / all(전체) / b(이전) / q(종료):
 ```
 
 | 항목 | 설명 |
@@ -307,9 +316,9 @@ output/
 
 **수강완료 강의 처리 흐름**:
 
-1. 강의 페이지 진입
-2. iframe 대기 + 이어보기 다이얼로그 → "아니오"
-3. **재생 버튼 클릭** (비디오 URL 캡처 트리거)
+1. 비디오 URL 캡처 시작 (페이지 이동 전에 걸고, 새 페이지가 커밋된 뒤의 요청만 받음) → 강의 페이지 진입. 로그인 페이지로 튕기면 재로그인 후 재진입
+2. iframe 대기 + 이어보기 다이얼로그 → "예"
+3. **재생 버튼 클릭** (재생 버튼이 없어도 그때까지 잡은 URL은 사용)
 4. URL 캡처 대기 (최대 5초)
 5. **즉시 `video.pause()`** — 불필요한 재생 방지
 6. 다운로드 + 전사 시작
@@ -334,10 +343,14 @@ output/
   다운로드: 5개 (수강완료 강의)
   스크립트: 8개 추출 -> output/
   수강 실패: 1개
+  다운로드 실패: 1개 (로그 확인)
 ══════════════════════════════════════════
 ```
 
-카운터: `watch_completed` / `download_only` / `transcribed` / `watch_failed`
+카운터: `watch_completed` / `download_only` / `transcribed` / `watch_failed` / `download_failed`
+
+- `download_failed` = 선택한 강의 수 − mp4 확보 수 (URL 미감지 강의 포함)
+- 강의 하나가 예외로 실패해도 `watch_failed`로 세고 다음 강의로 넘어간다
 
 해당 카운트가 0이면 해당 줄 생략.
 
@@ -347,11 +360,13 @@ output/
 
 | 케이스 | 대응 |
 |--------|------|
-| 수강완료 강의에서 비디오 URL 캡처 실패 | 기존 로직 유지 — "영상 URL 미감지" 출력, 스킵 |
-| 수강완료 강의의 이어보기 다이얼로그 | 기존 로직 유지 — "아니오" 클릭 |
+| 수강완료 강의에서 비디오 URL 캡처 실패 | "영상 URL 미감지" 출력, 스킵 — 결과 보고의 다운로드 실패에 포함 |
+| 수강완료 강의의 이어보기 다이얼로그 | "예" 클릭 (이어서 재생) |
 | 시작일이 미래인 강의 | 기존 필터 유지 — 제외 |
 | 동영상 강의가 없는 과목 | `durationSec <= 0` 필터로 자연스럽게 제외 |
-| 이미 다운로드된 파일 존재 | 현행 유지 (덮어쓰기) |
+| 이미 다운로드된 파일 존재 | 건너뜀 (`.mp4` 있으면 다운로드, `.txt` 있으면 전사 생략). 받다 실패하면 `.part.mp4`만 지워지고 `.mp4`는 안 남음 |
+| 다운로드 중 네트워크 무응답 | 60초 무응답이면 실패 처리 |
+| 긴 연속 수강 중 세션 만료 | SSU: 강의 진입 시 재로그인. 로그인·과목 조회 타임아웃은 최대 3회 재시도 |
 
 ---
 
@@ -368,5 +383,7 @@ output/
 | `src/auto_watch/config.py` | `SchoolConfig`, `SCHOOL_CONFIGS` | 학교별 설정 + 환경변수 |
 | `src/auto_watch/browser.py` | `setup_browser()` | Playwright 브라우저 설정 |
 | `src/auto_watch/transcription.py` | `download_and_transcribe()` | 영상 다운로드 + 전사 |
+| `src/auto_watch/util.py` | `format_duration()`, `PlaybackWatchdog`, `RequestUrlCapture` | 시간 포맷, 재생 정체 감시, 영상 URL 캡처 |
+| `src/audio_pipeline/transcriber.py` | `WhisperTranscriber`, `format_paragraphs()` | mlx/faster-whisper 전사 + 30초 문단 포맷 |
 
 > `courses.py`, `player.py`는 Provider 구조 전환 시 삭제됨 → 각 Provider 클래스 메서드로 통합.

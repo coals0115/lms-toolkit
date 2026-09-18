@@ -45,7 +45,9 @@ CHROME_PATH=(선택, Chrome 경로 오버라이드)
 - **Whisper 모델 캐시**: `~/.cache/huggingface/hub/` (~1.5GB)
 - **전사 엔진**: Apple Silicon은 mlx-whisper(GPU), 그 외는 faster-whisper(CPU) 폴백.
   CTranslate2에 Metal 백엔드가 없어 faster-whisper는 GPU를 못 쓴다 (실측 2.5배속 vs 13배속)
-- 출력: `output/과목명/` 에 `.mp4` + `.txt` 저장. WAV는 전사 후 자동 삭제
+- 출력: `output/과목명/` 에 `.mp4` + `.txt` 저장. txt는 30초 문단 + `[m:ss]` 시각 형식
+- **이미 있으면 건너뜀**: `.mp4` 있으면 다운로드, `.txt` 있으면 전사를 안 한다. 전사 설정을 바꿔 다시 만들려면 `.txt`를 지워야 함
+- **output 경로는 NFD**: macOS 파일명이 NFD라 한글 경로를 직접 타이핑하면 "No such file". `find`/glob으로 찾아서 쓸 것
 - **로깅**: 시스템 로그는 stderr (logging 모듈), CLI 대면 출력만 stdout (print)
 
 ## 플러그인 구조
