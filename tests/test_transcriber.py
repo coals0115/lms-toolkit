@@ -18,3 +18,21 @@ def test_blank_segments_are_skipped():
 
 def test_empty():
     assert format_paragraphs([]) == ""
+
+
+def test_mlx_does_not_condition_on_previous_text(tmp_path, monkeypatch):
+    import mlx_whisper
+
+    from src.audio_pipeline.transcriber import WhisperTranscriber
+
+    seen = {}
+
+    def fake(audio, **kw):
+        seen.update(kw)
+        return {"segments": [{"start": 0.0, "text": "안녕"}]}
+
+    monkeypatch.setattr(mlx_whisper, "transcribe", fake)
+    t = WhisperTranscriber.__new__(WhisperTranscriber)
+    t._use_mlx = True
+    t.transcribe("a.mp4", str(tmp_path / "a.txt"))
+    assert seen["condition_on_previous_text"] is False

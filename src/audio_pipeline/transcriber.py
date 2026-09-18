@@ -27,6 +27,10 @@ def format_paragraphs(segments: list[tuple[float, str]]) -> str:
 # 같은 오디오 기준 CPU 2.5배속 → mlx 13배속이라 arm64에서는 mlx를 우선한다.
 MLX_REPO = "mlx-community/whisper-large-v3-turbo"
 
+# 기본값(True)이면 한 번 잘못 들은 말이 다음 구간 프롬프트로 넘어가 "B B B…" 반복 루프가
+# 되고, 그동안의 실제 발화를 덮어쓴다. 문맥이 끊긴다고 켜면 안 된다.
+CONDITION_ON_PREVIOUS_TEXT = False
+
 
 class WhisperTranscriber:
     def __init__(self, model_name: str = "turbo") -> None:
@@ -51,7 +55,12 @@ class WhisperTranscriber:
             self._transcribe_mlx(audio_path, txt_path)
             return
 
-        segments, info = self.model.transcribe(audio_path, language="ko", beam_size=5)
+        segments, info = self.model.transcribe(
+            audio_path,
+            language="ko",
+            beam_size=5,
+            condition_on_previous_text=CONDITION_ON_PREVIOUS_TEXT,
+        )
         duration = info.duration
 
         collected: list[tuple[float, str]] = []
@@ -82,7 +91,12 @@ class WhisperTranscriber:
         import mlx_whisper
 
         try:
-            result = mlx_whisper.transcribe(audio_path, path_or_hf_repo=MLX_REPO, language="ko")
+            result = mlx_whisper.transcribe(
+                audio_path,
+                path_or_hf_repo=MLX_REPO,
+                language="ko",
+                condition_on_previous_text=CONDITION_ON_PREVIOUS_TEXT,
+            )
             segments = [(seg["start"], seg["text"]) for seg in result["segments"]]
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(format_paragraphs(segments))
