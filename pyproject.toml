@@ -8,10 +8,6 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "requests>=2.32.0",
     "faster-whisper>=1.1.0",
-    "pydantic>=2.11.0",
-    "openai>=1.84.0",
-    "google-genai>=1.0.0",
-    "pyperclip>=1.9.0",
     "truststore>=0.10.4",
     "mlx-whisper>=0.4.3",
 ]
@@ -70,8 +66,6 @@ disallow_untyped_defs = false
 [[tool.mypy.overrides]]
 module = [
     "faster_whisper.*",
-    "google.*",
-    "pyperclip.*",
     "ctranslate2.*",
 ]
 ignore_missing_imports = true
