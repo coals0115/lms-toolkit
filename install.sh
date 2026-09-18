@@ -108,17 +108,13 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 5/6: uv sync + Playwright
+# 5/6: uv sync
 # ─────────────────────────────────────────────
 echo -e "${BOLD}[5/6] Python 패키지 설치...${NC}"
 
 info "의존성 동기화 중..."
 uv sync
 ok "패키지 설치 완료"
-
-info "Chromium 설치 중..."
-uv run python -m playwright install chromium 2>&1 | tail -1
-ok "Playwright 설정 완료"
 
 # ─────────────────────────────────────────────
 # 6/6: .env 파일
