@@ -376,6 +376,10 @@ class SSUProvider:
     async def _enter_lecture_page(self, page: Page, lecture: Lecture) -> Frame | None:
         """강의 페이지 진입 → iframe 대기 → 이어보기 처리 → commons frame 반환"""
         await page.goto(lecture["href"], wait_until="load")
+        if "login" in page.url or "smartid" in page.url:
+            # 몇 시간 연속 수강하면 세션이 만료돼 로그인 페이지로 튕긴다
+            await self._sso_login_if_needed(page)
+            await page.goto(lecture["href"], wait_until="load")
 
         await self._get_tool_content_frame(page, lecture_page=True)
 

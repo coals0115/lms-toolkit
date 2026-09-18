@@ -10,6 +10,7 @@ from datetime import datetime
 
 import truststore
 from playwright.async_api import Page, async_playwright
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode, select_school
@@ -229,6 +230,12 @@ async def main() -> None:
                     await provider.login(page)
                     courses = await provider.get_courses(page)
                     break
+                except PlaywrightTimeoutError as e:
+                    if attempt == 2:
+                        logger.error("LMS 응답 없음 3회. 종료합니다: %s", e)
+                        sys.exit(1)
+                    logger.warning("LMS 응답 지연 — 다시 시도합니다 (%d/3)", attempt + 2)
+                    await page.goto("about:blank")
                 except LoginError:
                     if attempt == 2:
                         logger.error("로그인 3회 실패. 종료합니다.")
