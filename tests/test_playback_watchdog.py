@@ -70,3 +70,12 @@ def test_미세한_증가는_진행이_아니다(position):
     _rewind(watchdog, PLAYBACK_STALL_TIMEOUT_SEC + 1)
     watchdog.update(position)
     assert watchdog.give_up_reason() is not None
+
+
+def test_실제_영상길이를_알게되면_상한을_늘린다():
+    """KCU는 API가 재생시간을 안 줘서 30분 기본값으로 시작한다."""
+    watchdog = PlaybackWatchdog(1800)
+    watchdog.set_duration(TWO_HOURS)
+    _rewind(watchdog, 1800 * PLAYBACK_MAX_DURATION_MULTIPLIER + PLAYBACK_TIMEOUT_BUFFER_SEC + 1)
+    watchdog.update(5000.0)
+    assert watchdog.give_up_reason() is None

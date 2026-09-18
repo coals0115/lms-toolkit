@@ -36,8 +36,14 @@ class PlaybackWatchdog:
         self._started_at = now
         self._last_advance_at = now
         self._last_position = -1.0
-        self._max_elapsed_sec = (
-            duration_sec * PLAYBACK_MAX_DURATION_MULTIPLIER + PLAYBACK_TIMEOUT_BUFFER_SEC
+        self._max_elapsed_sec = 0.0
+        self.set_duration(duration_sec)
+
+    def set_duration(self, duration_sec: float) -> None:
+        """실제 영상 길이를 뒤늦게 알게 됐을 때 절대 상한을 늘린다 (줄이지는 않음)."""
+        self._max_elapsed_sec = max(
+            self._max_elapsed_sec,
+            duration_sec * PLAYBACK_MAX_DURATION_MULTIPLIER + PLAYBACK_TIMEOUT_BUFFER_SEC,
         )
 
     def update(self, position: float | None) -> None:

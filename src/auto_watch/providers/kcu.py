@@ -307,7 +307,7 @@ class KCUProvider:
                 else:
                     title = f"{week_cnt}주 {lect_no}강 {lect_title}"
 
-                rtprgs = int(item.get("rtprgsRpblty", "0"))
+                rtprgs = float(item.get("rtprgsRpblty") or 0)
                 is_completed = rtprgs >= 99
 
                 # href에 강의 식별 메타데이터를 JSON으로 인코딩
@@ -561,6 +561,7 @@ class KCUProvider:
             watchdog.update(progress["currentTime"] if progress else None)
 
             if progress:
+                watchdog.set_duration(progress["duration"])
                 pct = (
                     (progress["currentTime"] / progress["duration"] * 100)
                     if progress["duration"]
