@@ -187,30 +187,21 @@ async def download_and_transcribe(
         logger.exception("다운로드 실패")
         return result
 
-    # 2. mp4 → wav → txt (동시 1개 제한 — CPU 집중)
+    # 2. mp4 → txt (동시 1개 제한 — GPU/CPU 집중)
     try:
 
         def _transcribe():
             import time
 
-            from src.audio_pipeline.converter import convert_mp4_to_wav
-
-            wav_path = course_dir / f"{safe_title}.wav"
-
-            logger.info("스크립트: [1/3] mp4 → wav 변환 중...")
-            convert_mp4_to_wav(str(mp4_path), str(wav_path))
-
-            logger.info("스크립트: [2/3] Whisper 모델 로딩...")
+            logger.info("스크립트: [1/2] Whisper 모델 로딩...")
             transcriber = _get_whisper()
 
-            logger.info("스크립트: [3/3] 음성 → 텍스트 전사 중...")
+            logger.info("스크립트: [2/2] 음성 → 텍스트 전사 중...")
             t_start = time.time()
-            transcriber.transcribe(str(wav_path), str(txt_path))
+            transcriber.transcribe(str(mp4_path), str(txt_path))
             elapsed = time.time() - t_start
             em, es = divmod(int(elapsed), 60)
             logger.info("스크립트: 전사 완료 (%d분 %d초)", em, es)
-
-            wav_path.unlink(missing_ok=True)
             return str(txt_path)
 
         async with _get_transcribe_sem():
