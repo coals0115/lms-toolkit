@@ -1,6 +1,9 @@
 """범용 헬퍼"""
 
+import asyncio
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
 from .config import (
     PLAYBACK_ADVANCE_EPSILON_SEC,
@@ -69,3 +72,39 @@ class PlaybackWatchdog:
         if self.elapsed_sec > self._max_elapsed_sec:
             return f"최대 재생 시간 초과 {self.elapsed_sec:.0f}s"
         return None
+
+
+class RequestUrlCapture:
+    """페이지 이동 직전에 걸어두고, 새 페이지가 커밋된 뒤 나간 첫 영상 요청 URL을 잡는다.
+
+    이동 뒤에 걸면 페이지 로드·이어보기 클릭 중 나간 요청을 놓치고, 그냥 먼저 걸면
+    아직 스트리밍 중인 이전 강의의 요청을 잡는다.
+    """
+
+    def __init__(self, page: Any, predicate: Callable[[str], bool]) -> None:
+        self._page = page
+        self._predicate = predicate
+        self._armed = False
+        self.url: str | None = None
+        page.on("framenavigated", self._on_navigated)
+        page.on("request", self._on_request)
+
+    def _on_navigated(self, frame: Any) -> None:
+        # 여기서 url을 초기화하면 안 된다 — SPA history 이동도 framenavigated다
+        if frame is self._page.main_frame:
+            self._armed = True
+
+    def _on_request(self, request: Any) -> None:
+        if self._armed and self.url is None and self._predicate(request.url):
+            self.url = request.url
+
+    async def wait(self, timeout_sec: float) -> str | None:
+        for _ in range(int(timeout_sec * 10)):
+            if self.url:
+                break
+            await asyncio.sleep(0.1)
+        return self.url
+
+    def close(self) -> None:
+        self._page.remove_listener("framenavigated", self._on_navigated)
+        self._page.remove_listener("request", self._on_request)

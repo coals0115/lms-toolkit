@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 
-from playwright.async_api import Frame, Page, Request
+from playwright.async_api import Frame, Page
 
 from ..config import (
     IFRAME_TIMEOUT_MS,
@@ -16,7 +16,7 @@ from ..config import (
 from ..exceptions import LoginError
 from ..transcription import download_and_transcribe
 from ..types import Course, Lecture, ProcessResult, TranscriptResult
-from ..util import PlaybackWatchdog, format_duration
+from ..util import PlaybackWatchdog, RequestUrlCapture, format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -435,27 +435,10 @@ class KCUProvider:
 
         return player_frame
 
-    async def _capture_stream_url(self, page: Page, timeout_sec: int = 15) -> str | None:
-        """네트워크 요청에서 스트리밍 URL 캡처 (m3u8/mp4/ts)"""
-        captured: dict[str, str | None] = {"url": None}
-
-        def on_request(request: Request):
-            if captured["url"] is not None:
-                return
-            url = request.url
-            # HLS manifest 또는 직접 비디오 파일
-            if ".m3u8" in url or ("/mp4/" in url and ".mp4" in url):
-                captured["url"] = url
-
-        page.on("request", on_request)
-
-        for _ in range(timeout_sec * 10):
-            if captured["url"]:
-                break
-            await asyncio.sleep(0.1)
-
-        page.remove_listener("request", on_request)
-        return captured["url"]
+    @staticmethod
+    def _is_stream_url(url: str) -> bool:
+        # HLS manifest 또는 직접 비디오 파일
+        return ".m3u8" in url or ("/mp4/" in url and ".mp4" in url)
 
     async def _extract_video_src(self, player_frame: Frame) -> str | None:
         """플레이어 iframe 내 video 요소에서 직접 소스 URL 추출"""
@@ -634,24 +617,25 @@ class KCUProvider:
             logger.info("[PLAY] %s (%s)", title, format_duration(duration_sec))
         print(f"{'=' * 50}")
 
-        # 1. lectRoom에 POST로 진입
-        await self._navigate_to_lect_room(page, lect_meta)
+        capture = RequestUrlCapture(page, self._is_stream_url)
+        try:
+            # 1. lectRoom에 POST로 진입
+            await self._navigate_to_lect_room(page, lect_meta)
 
-        # 2. 스트림 URL 캡처를 위한 리스너 등록 + 플레이어 iframe 대기
-        stream_capture_task = asyncio.create_task(self._capture_stream_url(page, timeout_sec=30))
+            # 2. 플레이어 iframe 대기
+            player_frame = await self._wait_for_player_frame(page)
+            if not player_frame:
+                logger.error("플레이어 iframe을 찾을 수 없음")
+                return {"attended": False, "download_only": False, "mp4": None, "txt": None}
 
-        player_frame = await self._wait_for_player_frame(page)
-        if not player_frame:
-            logger.error("플레이어 iframe을 찾을 수 없음")
-            stream_capture_task.cancel()
-            return {"attended": False, "download_only": False, "mp4": None, "txt": None}
+            # 3. 재생 시작
+            await self._start_playback(player_frame)
+            await asyncio.sleep(3)
 
-        # 3. 재생 시작
-        await self._start_playback(player_frame)
-        await asyncio.sleep(3)
-
-        # 4. 스트림 URL 캡처 대기
-        stream_url = await stream_capture_task
+            # 4. 스트림 URL 캡처 대기
+            stream_url = await capture.wait(timeout_sec=30)
+        finally:
+            capture.close()
 
         # 네트워크에서 못 잡으면 player frame에서 직접 추출
         if not stream_url:

@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 
-from playwright.async_api import Frame, Page, Request
+from playwright.async_api import Frame, Page
 
 from ..config import (
     LOGIN_TIMEOUT_MS,
@@ -18,7 +18,7 @@ from ..config import (
 from ..exceptions import BrowserError, LoginError
 from ..transcription import download_and_transcribe
 from ..types import Course, Lecture, ProcessResult, TranscriptResult
-from ..util import PlaybackWatchdog, format_duration
+from ..util import PlaybackWatchdog, RequestUrlCapture, format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +165,7 @@ class SSUProvider:
 
         if lecture_page:
             # 강의 개별 페이지: commons 플레이어 iframe 대기
-            await frame.wait_for_selector(
-                ".xnlailvc-commons-frame", timeout=timeout
-            )
+            await frame.wait_for_selector(".xnlailvc-commons-frame", timeout=timeout)
         else:
             # 주차학습/마이페이지: AJAX 콘텐츠 로드 대기
             # 주의: "모두 접기"는 빈 상태에서도 보이므로 조건에서 제외
@@ -267,9 +265,7 @@ class SSUProvider:
             expand_btn = await frame.query_selector('text="모두 펼치기"')
             if expand_btn:
                 await expand_btn.dispatch_event("click")
-                await frame.wait_for_selector(
-                    ".xnmb-module_item-outer-wrapper", timeout=10000
-                )
+                await frame.wait_for_selector(".xnmb-module_item-outer-wrapper", timeout=10000)
                 logger.info("전체 주차 펼침")
         except Exception as e:
             logger.warning("주차 펼치기 실패: %s", e)
@@ -427,16 +423,10 @@ class SSUProvider:
 
         return commons
 
-    async def _click_play_and_capture_url(self, page: Page, commons: Frame) -> str | None:
+    async def _click_play_and_capture_url(
+        self, commons: Frame, capture: RequestUrlCapture
+    ) -> str | None:
         """재생 버튼 클릭 + 비디오 URL 캡처"""
-        captured_video_url: dict[str, str | None] = {"url": None}
-
-        def on_request(request: Request):
-            if captured_video_url["url"] is None and self._is_target_video_url(request.url):
-                captured_video_url["url"] = request.url
-
-        page.on("request", on_request)
-
         try:
             await commons.wait_for_selector(
                 ".vc-front-screen-play-btn", timeout=SELECTOR_TIMEOUT_MS
@@ -446,8 +436,7 @@ class SSUProvider:
             logger.info("재생 시작")
         except Exception as e:
             logger.error("재생 버튼 클릭 실패: %s", e)
-            page.remove_listener("request", on_request)
-            return None
+            return capture.url
 
         # 재생 버튼 클릭 후 이어보기 다이얼로그가 뜰 수 있음
         try:
@@ -464,14 +453,7 @@ class SSUProvider:
 
         await asyncio.sleep(3)
 
-        # 비디오 URL 캡처 대기 (최대 5초)
-        for _ in range(50):
-            if captured_video_url["url"]:
-                break
-            await asyncio.sleep(0.1)
-
-        page.remove_listener("request", on_request)
-        return captured_video_url["url"]
+        return await capture.wait(timeout_sec=5)
 
     async def _monitor_playback(self, commons: Frame, title: str, duration_sec: int) -> bool:
         """재생 진행 모니터링. 수강 완료 시 True 반환."""
@@ -570,11 +552,14 @@ class SSUProvider:
             logger.info("[PLAY] %s (%s)", title, format_duration(duration_sec))
         print(f"{'─' * 50}")
 
-        commons = await self._enter_lecture_page(page, lecture)
-        if not commons:
-            return {"attended": False, "download_only": False, "mp4": None, "txt": None}
-
-        video_url = await self._click_play_and_capture_url(page, commons)
+        capture = RequestUrlCapture(page, self._is_target_video_url)
+        try:
+            commons = await self._enter_lecture_page(page, lecture)
+            if not commons:
+                return {"attended": False, "download_only": False, "mp4": None, "txt": None}
+            video_url = await self._click_play_and_capture_url(commons, capture)
+        finally:
+            capture.close()
 
         # 수강완료 강의: 즉시 비디오 정지
         if is_completed and video_url:
