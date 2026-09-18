@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import requests as req_lib
@@ -12,6 +13,7 @@ from .cli import _safe_filename
 from .config import (
     DOWNLOAD_CHUNK_SIZE,
     DOWNLOAD_REPORT_INTERVAL,
+    DOWNLOAD_TIMEOUT,
     OUTPUT_DIR,
     PROJECT_DIR,
     USER_AGENT,
@@ -61,42 +63,55 @@ def _download_mp4(video_url: str, mp4_path, referer: str) -> str:
         "User-Agent": USER_AGENT,
         "Referer": referer,
     }
-    resp = req_lib.get(video_url, stream=True, headers=headers)
+    resp = req_lib.get(video_url, stream=True, headers=headers, timeout=DOWNLOAD_TIMEOUT)
     resp.raise_for_status()
     total = int(resp.headers.get("Content-Length", 0))
     downloaded = 0
     last_report = 0
-    with open(mp4_path, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
-            if chunk:
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total and downloaded - last_report >= DOWNLOAD_REPORT_INTERVAL:
-                    pct = downloaded / total * 100
-                    logger.info(
-                        "다운로드: %dMB / %dMB (%.0f%%)",
-                        downloaded // (1024 * 1024),
-                        total // (1024 * 1024),
-                        pct,
-                    )
-                    last_report = downloaded
+    part_path = _part_path(mp4_path)
+    try:
+        with open(part_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total and downloaded - last_report >= DOWNLOAD_REPORT_INTERVAL:
+                        pct = downloaded / total * 100
+                        logger.info(
+                            "다운로드: %dMB / %dMB (%.0f%%)",
+                            downloaded // (1024 * 1024),
+                            total // (1024 * 1024),
+                            pct,
+                        )
+                        last_report = downloaded
+        part_path.replace(mp4_path)
+    finally:
+        part_path.unlink(missing_ok=True)
     return str(mp4_path)
+
+
+def _part_path(mp4_path: Path) -> Path:
+    # 완성된 파일만 .mp4 이름을 갖게 해야 "이미 받았으면 건너뛰기"가 반쯤 받은 파일을 완성본으로 착각하지 않는다.
+    return mp4_path.with_name(mp4_path.stem + ".part.mp4")
 
 
 async def _download_hls(video_url: str, mp4_path) -> str:
     """ffmpeg로 HLS(m3u8) → MP4 변환 (진행률 실시간 출력)"""
     import re
 
+    part_path = _part_path(mp4_path)
     cmd = [
         "ffmpeg",
         "-y",
+        "-rw_timeout",
+        str(DOWNLOAD_TIMEOUT[1] * 1_000_000),
         "-i",
         video_url,
         "-c",
         "copy",
         "-bsf:a",
         "aac_adtstoasc",
-        str(mp4_path),
+        str(part_path),
     ]
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -119,8 +134,10 @@ async def _download_hls(video_url: str, mp4_path) -> str:
                 last_log_sec = sec
     await proc.wait()
     if proc.returncode != 0:
+        part_path.unlink(missing_ok=True)
         stderr_text = b"".join(stderr_chunks[-20:]).decode(errors="replace")
         raise RuntimeError(f"ffmpeg 실패: {stderr_text[-500:]}")
+    part_path.replace(mp4_path)
     return str(mp4_path)
 
 
@@ -143,18 +160,29 @@ async def download_and_transcribe(
     mp4_path = course_dir / f"{safe_title}.mp4"
     txt_path = course_dir / f"{safe_title}.txt"
 
+    if txt_path.exists():
+        logger.info("스크립트: 이미 있음 — 건너뜀 (%s)", txt_path.name)
+        result["txt"] = str(txt_path)
+        if mp4_path.exists():
+            result["mp4"] = str(mp4_path)
+        return result
+
     # 1. 다운로드 (동시 2개 제한)
     try:
-        async with _get_download_sem():
-            logger.info("다운로드: 시작...")
-            if hls:
-                result["mp4"] = await _download_hls(video_url, mp4_path)
-            else:
-                result["mp4"] = await loop.run_in_executor(
-                    None, _download_mp4, video_url, mp4_path, referer
-                )
-            size_mb = mp4_path.stat().st_size / (1024 * 1024)
-            logger.info("다운로드: 완료 (%.1fMB)", size_mb)
+        if mp4_path.exists():
+            logger.info("다운로드: 이미 있음 — 건너뜀")
+            result["mp4"] = str(mp4_path)
+        else:
+            async with _get_download_sem():
+                logger.info("다운로드: 시작...")
+                if hls:
+                    result["mp4"] = await _download_hls(video_url, mp4_path)
+                else:
+                    result["mp4"] = await loop.run_in_executor(
+                        None, _download_mp4, video_url, mp4_path, referer
+                    )
+                size_mb = mp4_path.stat().st_size / (1024 * 1024)
+                logger.info("다운로드: 완료 (%.1fMB)", size_mb)
     except Exception:
         logger.exception("다운로드 실패")
         return result
