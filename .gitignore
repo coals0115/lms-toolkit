@@ -204,3 +204,9 @@ logs/
 # Auto-watch output (영상 + 스크립트)
 output/
 
+
+# 에디터 swap (.env 사본이 남을 수 있음)
+*.swp
+
+# Playwright MCP 콘솔 로그
+.playwright-mcp/
