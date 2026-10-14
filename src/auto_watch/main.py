@@ -303,7 +303,7 @@ async def run_batch(args: argparse.Namespace) -> int:
                 logger.exception("%s 실패", school)
                 report["schools"][school] = {"error": f"{type(e).__name__}: {e}"}
             finally:
-                await browser.close()
+                await _close_browser(browser)
     report["finished"] = datetime.now().isoformat(timespec="seconds")
 
     text = json.dumps(report, ensure_ascii=False, indent=1)
@@ -315,10 +315,48 @@ async def run_batch(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+# 정상 닫기는 0.1초. Ctrl+C 땐 Playwright 드라이버(handle_sigint)가 브라우저를 먼저 닫아
+# close() 가 응답을 못 받고 이 시간만큼 기다린다
+BROWSER_CLOSE_TIMEOUT_SEC = 3
+
+
+async def _close_browser(browser: Any) -> None:
+    # Chrome 이 멈추면 close() 가 끝나지 않아 프로세스가 터미널에 계속 남는다
+    try:
+        await asyncio.wait_for(browser.close(), BROWSER_CLOSE_TIMEOUT_SEC)
+    except Exception as e:
+        logger.warning("브라우저 닫기 실패 — 그대로 종료: %s", e)
+
+
+def run() -> None:
+    """Ctrl+C 한 번이면 브라우저를 닫고 끝낸다.
+
+    asyncio.run() 을 쓰지 않는다 — Ctrl+C 를 작업 취소로 바꾸는데, 번호 입력(input) 중엔
+    루프가 막혀 취소가 전달되지 않아 첫 Ctrl+C 가 무시되고 프로세스·Chrome 이 남았다.
+    """
+    loop = asyncio.new_event_loop()
+    task = loop.create_task(main())
+    try:
+        loop.run_until_complete(task)
+    except KeyboardInterrupt:
+        # 재생 대기(sleep) 중이면 main 의 finally 가 아직 안 돌았다 — 취소해서 브라우저를 닫게 한다
+        if not task.done():
+            task.cancel()
+            with contextlib.suppress(BaseException):
+                loop.run_until_complete(task)
+        # 끝난 작업의 KeyboardInterrupt 를 꺼내 두지 않으면 asyncio 가 traceback 을 찍는다
+        with contextlib.suppress(BaseException):
+            task.result()
+        print("\n중단했습니다.")
+        sys.exit(130)
+    finally:
+        loop.close()
+
+
 def cli_entry() -> None:
     """project.scripts 엔트리포인트"""
     setup_logging()
-    asyncio.run(main())
+    run()
 
 
 async def main() -> None:
@@ -363,7 +401,7 @@ async def main() -> None:
                 logger.error("%s", e)
                 sys.exit(1)
             finally:
-                await browser.close()
+                await _close_browser(browser)
         return
 
     # 대화형 모드
@@ -433,6 +471,4 @@ async def main() -> None:
             logger.error("%s", e)
             sys.exit(1)
         finally:
-            with contextlib.suppress(EOFError):
-                input("\n 엔터를 누르면 브라우저를 닫습니다...")
-            await browser.close()
+            await _close_browser(browser)

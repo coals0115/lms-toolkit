@@ -7,8 +7,6 @@ Usage:
     python -m src.auto_watch
 """
 
-import asyncio
+from .main import run
 
-from .main import main
-
-asyncio.run(main())
+run()

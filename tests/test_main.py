@@ -40,3 +40,41 @@ async def test_one_failing_lecture_does_not_stop_batch(monkeypatch, capsys):
 
 async def _no_sleep(_):
     pass
+
+
+class _HangingBrowser:
+    def __init__(self):
+        self.called = False
+
+    async def close(self):
+        self.called = True
+        await __import__("asyncio").sleep(3600)
+
+
+async def test_close_browser_gives_up_when_chrome_hangs(monkeypatch):
+    monkeypatch.setattr(main, "BROWSER_CLOSE_TIMEOUT_SEC", 0.05)
+    browser = _HangingBrowser()
+
+    await main._close_browser(browser)
+
+    assert browser.called
+
+
+def test_ctrl_c_during_input_closes_and_exits(monkeypatch, capsys):
+    closed = []
+
+    async def fake_main():
+        try:
+            raise KeyboardInterrupt  # input() 중 Ctrl+C
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(main, "main", fake_main)
+
+    import pytest
+
+    with pytest.raises(SystemExit) as e:
+        main.run()
+    assert e.value.code == 130
+    assert closed
+    assert "중단했습니다" in capsys.readouterr().out
