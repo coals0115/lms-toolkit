@@ -67,19 +67,18 @@ $ python -m src.auto_watch
 3. 사용자가 과목 선택 → 해당 과목만 주차학습 페이지 진입
 4. movie 타입 강의 중 선택 → 다운로드/전사만 수행 (재생/출석 없음)
 
-### 모드 B — 자동 (cron, 미구현)
+### 모드 B — 자동 (배치)
 
-OpenClaw + cron으로 주기적 실행. 사용자 개입 없이 전체 자동.
+묻는 것 없이 돌고 결과를 JSON 으로 남긴다. 스케줄·텔레그램 알림은 이 레포 밖 `~/.claude/skills/school-watch`(launchd)가 맡는다.
 
 ```
-$ python -m src.auto_watch --auto
+$ uv run lms-toolkit --auto --check --report out.json   # 수강 + 과제·공지·출석
+$ uv run lms-toolkit --check --school kcu               # 수집만 (창 없음), 표준출력
 ```
 
-**흐름:**
-1. cron 트리거 (예: 매주 월요일 새벽)
-2. 로그인 → 시작일 지난 미수강 강의 전부 재생
-3. 스크립트 추출
-4. 텔레그램으로 결과 알림 ("3개 수강 완료, 스크립트 3개 저장")
+- `--auto`: 계정이 있는 학교(또는 `--school`)마다 로그인 → 시작일 지난 미수강 강의 전부 재생 + 스크립트 추출. 재생은 headed 라 창이 뜬다
+- `--check`: 과제·퀴즈·시험(`get_assignments`), 과목 공지 본문(`get_notices`), KCU 지각·미수강 수(`get_attendance`)
+- 한 학교가 실패해도 다음 학교는 돈다. 실패한 학교는 `error`, 항목만 실패하면 `errors` 에 남고 종료 코드 1
 
 ## 파이프라인
 
@@ -160,8 +159,8 @@ n by n 행렬이에요 행과 열을 바꿔 놓은 겁니다 ...
 4. **M3 — watch/download 모드 분리**: 모드 선택 UI + movie 필터 + lazy 스캔 ✅
 5. **M3.5 — 멀티 LMS 구조**: LMSProvider Protocol 기반 + 학교 선택 메뉴 ✅
 6. **M3.6 — KCU Provider**: 숭실사이버대 로그인/과목/강의/재생 전체 구현 ✅
-7. **M4 — 자동 모드**: `--auto` 플래그 + 전체 자동 재생
-8. **M5 — OpenClaw + 텔레그램**: cron 트리거 + 결과 알림
+7. **M4 — 자동 모드**: `--auto` 플래그 + 전체 자동 재생 ✅
+8. **M5 — 과제·공지 수집 + 텔레그램**: `--check` + school-watch(launchd) 알림 ✅
 
 ---
 
@@ -376,11 +375,12 @@ n by n 행렬이에요 행과 열을 바꿔 놓은 겁니다 ...
 
 | 파일 | 주요 함수/클래스 | 역할 |
 |------|----------|------|
-| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()` | 학교 선택 → 모드 분기 → 실행 |
+| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()`, `run_batch()` | 학교 선택 → 모드 분기 → 실행. `--auto`/`--check` 는 `run_batch()` |
+| `src/auto_watch/assignments.py` | `from_canvas_planner()`, `from_kcu_eval_rows()`, `from_canvas_announcements()`, `kcu_notice_body()` | 학교별 과제·공지 응답을 같은 모양(`Assignment`·`Notice`)으로 |
 | `src/auto_watch/cli.py` | `select_school()`, `select_mode()`, `select_courses()`, `select_lectures()` | CLI UI (학교/모드/과목/강의 선택) |
 | `src/auto_watch/provider.py` | `LMSProvider` Protocol, `get_provider()` | 멀티 LMS Provider 인터페이스 + 팩토리 |
-| `src/auto_watch/providers/ssu.py` | `SSUProvider` | 숭실대: login, get_courses, get_lectures, process_lecture |
-| `src/auto_watch/providers/kcu.py` | `KCUProvider` | 숭실사이버대: login, get_courses, get_lectures, process_lecture |
+| `src/auto_watch/providers/ssu.py` | `SSUProvider` | 숭실대: login, get_courses, get_lectures, process_lecture, get_assignments(planner API), get_notices(announcements API) |
+| `src/auto_watch/providers/kcu.py` | `KCUProvider` | 숭실사이버대: login, get_courses, get_lectures, process_lecture, get_assignments(학습평가응시 표), get_notices(공지 상세 POST), get_attendance(대시보드) |
 | `src/auto_watch/plugin.py` | `discover_plugins()`, `LMSPlugin` | entry_points 기반 플러그인 인프라 |
 | `src/auto_watch/config.py` | `SchoolConfig`, `SCHOOL_CONFIGS` | 학교별 설정 + 환경변수 |
 | `src/auto_watch/browser.py` | `setup_browser()` | Playwright 브라우저 설정 |

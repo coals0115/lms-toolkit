@@ -113,6 +113,16 @@ uv run lms-toolkit
 
 > 다운로드 모드에서는 미수강/수강완료 상관없이 다운로드/전사만 수행합니다.
 
+### 자동 실행 (묻지 않음)
+
+```bash
+uv run lms-toolkit --auto --check --report out.json   # 미수강 전부 수강 + 과제·공지·출석 수집
+uv run lms-toolkit --check                            # 수집만 (창 안 뜸), JSON 을 화면에
+uv run lms-toolkit --check --school kcu               # 학교 지정 (여러 번 가능)
+```
+
+`--check` 결과에는 과목별 과제·퀴즈·시험(마감·제출 여부), 공지 본문, 숭실사이버대 지각·미수강 수가 들어갑니다. 매일 알림은 `~/.claude/skills/school-watch`(launchd)가 이 명령을 돌려 텔레그램으로 보냅니다.
+
 ## 출력 파일
 
 결과물은 `output/과목명/` 폴더에 저장됩니다:
