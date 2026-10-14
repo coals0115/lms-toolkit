@@ -124,7 +124,7 @@ def from_canvas_announcements(
             course=_canvas_course(course_names.get(item.get("context_code", ""), "")),
             id=str(item["id"]),
             title=(item.get("title") or "").strip(),
-            posted=_canvas_due(item.get("posted_at")),
+            posted=_canvas_due(item.get("posted_at") or item.get("created_at")),
             body=html_to_text(item.get("message") or ""),
             url=item.get("html_url") or "",
         )

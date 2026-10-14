@@ -403,7 +403,7 @@ class SSUProvider:
         return from_canvas_planner(items, self._base_url)
 
     async def get_notices(self, page: Page, courses: list[Course]) -> list[Notice]:
-        """최근 30일 과목 공지"""
+        """이번 학기 과목 공지 (시험 일정 공지는 학기 초에 올라온다)"""
         await self._ensure_canvas(page)
         canvas_courses = await self._api_get_all(
             page, "/api/v1/courses?enrollment_state=active&per_page=100"
@@ -411,10 +411,14 @@ class SSUProvider:
         names = {f"course_{c['id']}": c.get("name", "") for c in canvas_courses}
         if not names:
             return []
-        start = (datetime.now(KST) - timedelta(days=30)).strftime("%Y-%m-%d")
+        now = datetime.now(KST)
+        start = (now - timedelta(days=120)).strftime("%Y-%m-%d")
+        # end_date 를 안 주면 start_date 부터 28일까지만 온다
+        end = (now + timedelta(days=1)).strftime("%Y-%m-%d")
         query = "&".join(f"context_codes[]={code}" for code in names)
         items = await self._api_get_all(
-            page, f"/api/v1/announcements?{query}&start_date={start}&per_page=100"
+            page,
+            f"/api/v1/announcements?{query}&start_date={start}&end_date={end}&per_page=100",
         )
         return from_canvas_announcements(items, names)
 
