@@ -6,6 +6,7 @@ import logging
 
 from playwright.async_api import Frame, Page
 
+from ..assignments import from_kcu_eval_rows, kcu_attendance, kcu_notice_body
 from ..config import (
     IFRAME_TIMEOUT_MS,
     PLAYBACK_COMPLETION_THRESHOLD,
@@ -13,9 +14,9 @@ from ..config import (
     PLAYBACK_STALL_NUDGE_SEC,
     SchoolConfig,
 )
-from ..exceptions import LoginError
+from ..exceptions import BrowserError, LoginError
 from ..transcription import download_and_transcribe
-from ..types import Course, Lecture, ProcessResult, TranscriptResult
+from ..types import Assignment, Course, Lecture, Notice, ProcessResult, TranscriptResult
 from ..util import PlaybackWatchdog, RequestUrlCapture, format_duration
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ _DASHBOARD_URL = "https://lms.kcu.ac/dashBoard/std"
 _COURSE_LIST_URL = "https://lms.kcu.ac/atnlcSubj/list"
 _LECT_ROOM_URL = "https://lms.kcu.ac/atnlcSubj/lectRoom"
 _WEEK_LECT_API_URL = "https://lms.kcu.ac/common/lect/selectWeekLectInfo"
+_EVAL_LIST_PATH = "/atnlcSubj/lrnEvlApyexm/list"
 
 _DEFAULT_DURATION_SEC = 1800  # 30분 기본값 (API에서 재생시간 미제공)
 _MAX_WEEKS = 15
@@ -351,6 +353,99 @@ class KCUProvider:
 
         return lectures
 
+    # ── 과제·공지·출석 ─────────────────────────────────────
+
+    async def get_assignments(self, page: Page, courses: list[Course]) -> list[Assignment]:
+        """과목마다 학습평가응시 표(시험·퀴즈·과제·토론, 시작/마감 일시, 응시현황)"""
+        import json
+
+        out: list[Assignment] = []
+        for course in courses:
+            await self._enter_lect_room(page, json.loads(course["courseId"]))
+            async with page.expect_navigation(wait_until="networkidle"):
+                await page.click(f'a[href="{_EVAL_LIST_PATH}"] >> nth=0')
+            rows = await page.evaluate("""
+                () => {
+                    const table = Array.from(document.querySelectorAll('table'))
+                        .find(t => (t.innerText || '').includes('마감일시'));
+                    if (!table) return null;
+                    return Array.from(table.querySelectorAll('tbody tr'))
+                        .map(tr => Array.from(tr.querySelectorAll('td, th')).map(td => td.innerText.trim()));
+                }
+            """)
+            if rows is None:
+                raise BrowserError(f"학습평가응시 표를 못 찾음: {course['name']}")
+            out.extend(from_kcu_eval_rows(course["name"], rows, self._base_url + _EVAL_LIST_PATH))
+        return out
+
+    async def get_notices(self, page: Page, courses: list[Course]) -> list[Notice]:
+        """과목마다 강의실 첫 화면 공지 상자의 공지 + 본문"""
+        import json
+
+        out: list[Notice] = []
+        for course in courses:
+            meta = json.loads(course["courseId"])
+            await self._enter_lect_room(page, meta)
+            items = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('.box.notice li[data-ntc-seq]')).map(li => ({
+                    seq: li.dataset.ntcSeq, lv: li.dataset.ntcLv,
+                    title: (li.querySelector('a')?.innerText || '').trim(),
+                    date: (li.querySelector('.date')?.innerText || '').trim(),
+                }))
+            """)
+            seen: set[str] = set()
+            for item in items:
+                # 공지 상자가 화면에 두 번(PC·모바일) 그려져 같은 공지가 두 번 잡힌다
+                if item["seq"] in seen:
+                    continue
+                seen.add(item["seq"])
+                # 상세는 POST 로만 열린다. fetch 로 받은 HTML 은 본문이 스크립트로 그려져 비어 있어
+                # 실제로 이동해서 읽는다
+                await self._post_form(
+                    page,
+                    "/atnlcSubj/subjNtbd/detail",
+                    {
+                        "shyr": meta["shyr"],
+                        "smstCd": meta["smstCd"],
+                        "coseCd": meta["coseCd"],
+                        "ntcSeq": item["seq"],
+                        "ntcLv": item["lv"],
+                        "regId": meta["user"],
+                        "prgmId": "LRN_LM_S_015",
+                        "menuCd": "04423",
+                        "currSub": "04423",
+                        "menuGrpCd": "new_SSJU",
+                    },
+                )
+                await page.wait_for_load_state("networkidle")
+                text = await page.evaluate("() => document.body.innerText")
+                out.append(
+                    Notice(
+                        school="kcu",
+                        course=course["name"],
+                        id=f"{meta['coseCd']}-{item['seq']}",
+                        title=item["title"],
+                        posted=item["date"] or None,
+                        body=kcu_notice_body(text),
+                        url=f"{self._base_url}/atnlcSubj/subjNtbd/list",
+                    )
+                )
+        return out
+
+    async def get_attendance(self, page: Page, courses: list[Course]) -> list[dict]:
+        """대시보드 과목 카드의 지각·미수강 수"""
+        await page.goto(_DASHBOARD_URL, wait_until="networkidle")
+        text = await page.evaluate("() => document.body.innerText")
+        out = []
+        for course in courses:
+            i = text.find(course["name"])
+            if i < 0:
+                continue
+            nexts = [text.find(c["name"], i + 1) for c in courses] + [text.find("사용자 정보", i)]
+            end = min([n for n in nexts if n > i], default=len(text))
+            out.append({"course": course["name"], **kcu_attendance(text[i:end])})
+        return out
+
     # ── iframe 헬퍼 ─────────────────────────────────────────
 
     def _find_player_frame(self, page: Page) -> Frame | None:
@@ -384,14 +479,17 @@ class KCUProvider:
         logger.info("강의 페이지 로드 완료")
 
     async def _post_lect_room(self, page: Page, form_data: dict[str, str]) -> None:
+        await self._post_form(page, "/atnlcSubj/lectRoom", form_data)
+
+    async def _post_form(self, page: Page, action: str, form_data: dict[str, str]) -> None:
         # submit 뒤 wait_for_load_state는 이전 문서가 이미 load 상태라 즉시 반환된다 → 이전 과목 DOM을 읽게 됨
         async with page.expect_navigation(wait_until="domcontentloaded"):
             await page.evaluate(
                 """
-                (params) => {
+                ([action, params]) => {
                     const form = document.createElement('form');
                     form.method = 'POST';
-                    form.action = '/atnlcSubj/lectRoom';
+                    form.action = action;
                     for (const [key, val] of Object.entries(params)) {
                         const input = document.createElement('input');
                         input.type = 'hidden';
@@ -403,7 +501,7 @@ class KCUProvider:
                     form.submit();
                 }
                 """,
-                form_data,
+                [action, form_data],
             )
 
     async def _wait_for_player_frame(self, page: Page) -> Frame | None:

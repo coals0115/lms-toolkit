@@ -3,9 +3,11 @@
 import asyncio
 import contextlib
 import logging
+from datetime import datetime, timedelta
 
 from playwright.async_api import Frame, Page
 
+from ..assignments import KST, from_canvas_announcements, from_canvas_planner
 from ..config import (
     LOGIN_TIMEOUT_MS,
     PLAYBACK_COMPLETION_THRESHOLD,
@@ -17,7 +19,7 @@ from ..config import (
 )
 from ..exceptions import BrowserError, LoginError
 from ..transcription import download_and_transcribe
-from ..types import Course, Lecture, ProcessResult, TranscriptResult
+from ..types import Assignment, Course, Lecture, Notice, ProcessResult, TranscriptResult
 from ..util import PlaybackWatchdog, RequestUrlCapture, format_duration
 
 logger = logging.getLogger(__name__)
@@ -362,6 +364,59 @@ class SSUProvider:
             logger.info("  %s %s (%s)", status, lec["title"], format_duration(lec["durationSec"]))
 
         return lectures
+
+    # ── 과제·공지 ───────────────────────────────────────────
+
+    async def _api_get_all(self, page: Page, path: str) -> list[dict]:
+        """Canvas API GET, Link 헤더의 next 를 끝까지 따라간다"""
+        items: list[dict] = await page.evaluate(
+            """
+            async (path) => {
+                const out = [];
+                let url = path;
+                for (let i = 0; url && i < 20; i++) {
+                    const r = await fetch(url, {headers: {Accept: 'application/json'}});
+                    if (!r.ok) throw new Error(`${r.status} ${url}`);
+                    out.push(...await r.json());
+                    const next = (r.headers.get('Link') || '').split(',').find(l => l.includes('rel="next"'));
+                    url = next ? next.match(/<([^>]+)>/)[1] : null;
+                }
+                return out;
+            }
+            """,
+            path,
+        )
+        return items
+
+    async def _ensure_canvas(self, page: Page) -> None:
+        if "canvas.ssu.ac.kr" not in page.url:
+            await page.goto(self._mypage_url, wait_until="networkidle")
+            await self._sso_login_if_needed(page)
+
+    async def get_assignments(self, page: Page, courses: list[Course]) -> list[Assignment]:
+        """2주 전부터 마감인 과제·퀴즈·토론 (제출 여부 포함)"""
+        await self._ensure_canvas(page)
+        start = (datetime.now(KST) - timedelta(days=14)).strftime("%Y-%m-%d")
+        items = await self._api_get_all(
+            page, f"/api/v1/planner/items?start_date={start}&per_page=100"
+        )
+        return from_canvas_planner(items, self._base_url)
+
+    async def get_notices(self, page: Page, courses: list[Course]) -> list[Notice]:
+        """최근 30일 과목 공지"""
+        await self._ensure_canvas(page)
+        canvas_courses = await self._api_get_all(
+            page, "/api/v1/courses?enrollment_state=active&per_page=100"
+        )
+        names = {f"course_{c['id']}": c.get("name", "") for c in canvas_courses}
+        if not names:
+            return []
+        start = (datetime.now(KST) - timedelta(days=30)).strftime("%Y-%m-%d")
+        query = "&".join(f"context_codes[]={code}" for code in names)
+        items = await self._api_get_all(
+            page, f"/api/v1/announcements?{query}&start_date={start}&per_page=100"
+        )
+        return from_canvas_announcements(items, names)
 
     # ── 강의 재생/다운로드 ──────────────────────────────────
 

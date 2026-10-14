@@ -27,6 +27,29 @@ class ProcessResult(TypedDict):
     txt: str | None
 
 
+class Assignment(TypedDict):
+    school: str
+    course: str
+    kind: str
+    title: str
+    start: str | None
+    due: str | None
+    submitted: bool | None
+    missing: bool
+    status: str
+    url: str
+
+
+class Notice(TypedDict):
+    school: str
+    course: str
+    id: str
+    title: str
+    posted: str | None
+    body: str
+    url: str
+
+
 class TranscriptResult(TypedDict):
     course: str
     title: str

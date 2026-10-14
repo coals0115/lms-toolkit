@@ -4,11 +4,13 @@ import argparse
 import asyncio
 import contextlib
 import getpass
+import json
 import logging
 import sys
 import time
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import truststore
@@ -96,11 +98,17 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
         logger.info("선택 없음. 종료.")
         return
 
+    await _watch_selected(page, provider, selected)
+
+
+async def _watch_selected(
+    page: Page, provider: LMSProvider, selected: list[Lecture]
+) -> dict[str, Any]:
     sel_total = sum(lec["durationSec"] for lec in selected)
     logger.info("%d개 선택, 총 %s", len(selected), format_duration(sel_total))
 
     started = time.monotonic()
-    watch_completed = 0
+    watched: list[Lecture] = []
     download_only = 0
     watch_failed: list[str] = []
     crashed: set[tuple[str, str]] = set()
@@ -114,7 +122,7 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
         elif result.get("download_only"):
             download_only += 1
         elif result["attended"]:
-            watch_completed += 1
+            watched.append(lecture)
         else:
             watch_failed.append(lecture["title"])
         await asyncio.sleep(3)
@@ -130,8 +138,8 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
 
     print(f"\n{'═' * 40}")
     print(f"  완료! (총 {format_duration(time.monotonic() - started)})")
-    if watch_completed:
-        print(f"  수강 처리: {watch_completed}개")
+    if watched:
+        print(f"  수강 처리: {len(watched)}개")
     if download_only:
         print(f"  다운로드: {download_only}개 (수강완료 강의)")
     if transcribed:
@@ -142,6 +150,11 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
             print(f"    - {title}")
     _print_failures("다운로드/전사 실패", failures)
     print(f"{'═' * 40}")
+    return {
+        "watched": [f"{lec['courseName']} — {lec['title']}" for lec in watched],
+        "failed": watch_failed,
+        "transcript_failed": [f"{t}: {r}" for t, r in failures],
+    }
 
 
 async def _run_download_mode(
@@ -210,12 +223,96 @@ async def _run_download_mode(
         break
 
 
-def _parse_args(plugins=None) -> argparse.Namespace:
+def _parse_args(plugins=None, argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LMS 자동 수강 시스템")
+    parser.add_argument("--auto", action="store_true", help="묻지 않고 미수강 강의를 전부 수강")
+    parser.add_argument("--check", action="store_true", help="과제·퀴즈·시험·공지·출석을 JSON 으로")
+    parser.add_argument(
+        "--school",
+        action="append",
+        choices=sorted(SCHOOL_CONFIGS),
+        help="학교 (여러 번 가능, 없으면 계정이 있는 학교 전부)",
+    )
+    parser.add_argument("--report", help="결과 JSON 을 저장할 경로 (없으면 표준출력)")
     if plugins:
         for plugin in plugins:
             plugin.add_arguments(parser)
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+async def _login(provider: LMSProvider, page: Page) -> list[Course]:
+    """배치용 로그인 — 비밀번호를 다시 묻지 않고, 응답 지연만 3번까지 다시 시도한다"""
+    for attempt in range(3):
+        try:
+            await provider.login(page)
+            return await provider.get_courses(page)
+        except PlaywrightTimeoutError:
+            if attempt == 2:
+                raise
+            logger.warning("LMS 응답 지연 — 다시 시도합니다 (%d/3)", attempt + 2)
+            await page.goto("about:blank")
+    return []
+
+
+async def _run_school(page: Page, provider: LMSProvider, args: argparse.Namespace) -> dict:
+    courses = await _login(provider, page)
+    entry: dict[str, Any] = {"courses": [c["name"] for c in courses]}
+    if args.auto:
+        lectures: list[Lecture] = []
+        for course in courses:
+            if course["videoCount"] > 0:
+                lectures += await provider.get_lectures(page, course["courseId"], course["name"])
+        pending = [lec for lec in lectures if not lec["isCompleted"]]
+        entry["watch"] = (
+            await _watch_selected(page, provider, pending)
+            if pending
+            else {"watched": [], "failed": [], "transcript_failed": []}
+        )
+    if args.check:
+        for key, method in (
+            ("assignments", "get_assignments"),
+            ("notices", "get_notices"),
+            ("attendance", "get_attendance"),
+        ):
+            fn = getattr(provider, method, None)
+            if fn is None:
+                continue
+            try:
+                entry[key] = await fn(page, courses)
+            except Exception as e:
+                logger.exception("%s 수집 실패", key)
+                entry.setdefault("errors", []).append(f"{key}: {type(e).__name__}: {e}")
+    return entry
+
+
+async def run_batch(args: argparse.Namespace) -> int:
+    """--auto / --check: 묻는 것 없이 돌고 결과를 JSON 으로 남긴다 (launchd 용)"""
+    schools = args.school or [s for s, c in SCHOOL_CONFIGS.items() if c.userid and c.password]
+    report: dict[str, Any] = {
+        "started": datetime.now().isoformat(timespec="seconds"),
+        "schools": {},
+    }
+    async with async_playwright() as p:
+        for school in schools:
+            provider = get_provider(school)
+            # 수강은 headless 면 플레이어 완료 이벤트가 안 나서 창을 띄운다
+            page, browser, _context = await setup_browser(p, headless=not args.auto)
+            try:
+                report["schools"][school] = await _run_school(page, provider, args)
+            except Exception as e:
+                logger.exception("%s 실패", school)
+                report["schools"][school] = {"error": f"{type(e).__name__}: {e}"}
+            finally:
+                await browser.close()
+    report["finished"] = datetime.now().isoformat(timespec="seconds")
+
+    text = json.dumps(report, ensure_ascii=False, indent=1)
+    if args.report:
+        Path(args.report).write_text(text, encoding="utf-8")
+    else:
+        print(text)
+    failed = any("error" in e for e in report["schools"].values())
+    return 1 if failed else 0
 
 
 def cli_entry() -> None:
@@ -232,6 +329,9 @@ async def main() -> None:
     setup_logging()
     plugins = discover_plugins()
     args = _parse_args(plugins)
+
+    if args.auto or args.check:
+        sys.exit(await run_batch(args))
 
     # 학교 선택 + Provider 생성
     school = select_school()
