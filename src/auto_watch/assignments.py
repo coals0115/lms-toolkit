@@ -47,6 +47,41 @@ def from_canvas_planner(items: Iterable[Mapping[str, Any]], base_url: str) -> li
     return out
 
 
+def from_canvas_undated(
+    items: Iterable[Mapping[str, Any]], course_name: str, base_url: str, now: datetime
+) -> list[Assignment]:
+    """Canvas /courses/:id/assignments?bucket=undated 응답 → Assignment
+
+    planner 는 마감일 없는 과제를 안 준다. 교수가 마감을 수업 시간에만 말하는 과제(피지컬미디어 실습)를
+    놓치지 않게, 열린(unlock_at 이 지난) 것만 날짜 없이 넣는다.
+    """
+    out: list[Assignment] = []
+    for item in items:
+        if item.get("due_at") or not item.get("published", True):
+            continue
+        unlock = item.get("unlock_at")
+        if unlock and datetime.fromisoformat(unlock.replace("Z", "+00:00")) > now:
+            continue
+        sub = item.get("submission") or {}
+        if sub.get("workflow_state") in ("submitted", "graded", "pending_review"):
+            continue  # 낸 것은 알릴 게 없다
+        out.append(
+            Assignment(
+                school="ssu",
+                course=_canvas_course(course_name),
+                kind="과제",
+                title=(item.get("name") or "").strip(),
+                start=_canvas_due(unlock),
+                due=None,
+                submitted=False if sub else None,
+                missing=False,
+                status="",
+                url=item.get("html_url") or base_url,
+            )
+        )
+    return out
+
+
 def _canvas_course(name: str) -> str:
     # "선형대수 (대면+사전녹화) (2150151201)" → "선형대수"
     return re.sub(r"\s*\([^)]*\)", "", name).strip() or name

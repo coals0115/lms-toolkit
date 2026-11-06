@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from playwright.async_api import Frame, Page
 
-from ..assignments import KST, from_canvas_announcements, from_canvas_planner
+from ..assignments import KST, from_canvas_announcements, from_canvas_planner, from_canvas_undated
 from ..config import (
     LOGIN_TIMEOUT_MS,
     PLAYBACK_COMPLETION_THRESHOLD,
@@ -400,7 +400,16 @@ class SSUProvider:
         items = await self._api_get_all(
             page, f"/api/v1/planner/items?start_date={start}&per_page=100"
         )
-        return from_canvas_planner(items, self._base_url)
+        out = from_canvas_planner(items, self._base_url)
+        # planner 는 마감일 없는 과제를 빼먹는다 — 과목마다 undated 묶음을 따로 받는다
+        now = datetime.now(KST)
+        for c in await self._api_get_all(page, "/api/v1/courses?enrollment_state=active&per_page=100"):
+            undated = await self._api_get_all(
+                page,
+                f"/api/v1/courses/{c['id']}/assignments?bucket=undated&include[]=submission&per_page=100",
+            )
+            out += from_canvas_undated(undated, c.get("name", ""), self._base_url, now)
+        return out
 
     async def get_notices(self, page: Page, courses: list[Course]) -> list[Notice]:
         """이번 학기 과목 공지 (시험 일정 공지는 학기 초에 올라온다)"""
