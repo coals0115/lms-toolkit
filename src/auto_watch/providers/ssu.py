@@ -403,7 +403,9 @@ class SSUProvider:
         out = from_canvas_planner(items, self._base_url)
         # planner 는 마감일 없는 과제를 빼먹는다 — 과목마다 undated 묶음을 따로 받는다
         now = datetime.now(KST)
-        for c in await self._api_get_all(page, "/api/v1/courses?enrollment_state=active&per_page=100"):
+        for c in await self._api_get_all(
+            page, "/api/v1/courses?enrollment_state=active&per_page=100"
+        ):
             undated = await self._api_get_all(
                 page,
                 f"/api/v1/courses/{c['id']}/assignments?bucket=undated&include[]=submission&per_page=100",

@@ -1,5 +1,7 @@
 """과제·공지 정리 함수 테스트 — 입력은 2026-10-14 실제 응답 모양"""
 
+from datetime import UTC, datetime
+
 from src.auto_watch import assignments as a
 
 
@@ -102,21 +104,22 @@ def test_canvas_announcements_strip_html():
 
 
 def test_from_canvas_undated_keeps_open_undated_only():
-    from datetime import datetime, timezone
-
-    from_canvas_undated = a.from_canvas_undated
-
-    now = datetime(2026, 11, 6, 1, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 6, 1, 0, tzinfo=UTC)
     items = [
-        {"name": "실습 9. I2C", "due_at": None, "unlock_at": "2026-11-02T10:30:00Z", "published": True,
-         "html_url": "https://canvas.ssu.ac.kr/courses/47677/assignments/737022",
-         "submission": {"workflow_state": "unsubmitted"}},
-        {"name": "실습 10. LCD", "due_at": None, "unlock_at": "2026-11-09T10:30:00Z", "published": True},
-        {"name": "실습 8", "due_at": None, "unlock_at": None, "published": True,
-         "submission": {"workflow_state": "submitted"}},
+        {
+            "name": "실습 9. I2C",
+            "due_at": None,
+            "unlock_at": "2026-11-02T10:30:00Z",
+            "published": True,
+            "html_url": "https://canvas.ssu.ac.kr/courses/47677/assignments/737022",
+            "submission": {"workflow_state": "unsubmitted"},
+        },
+        {"name": "실습 10. LCD", "due_at": None, "unlock_at": "2026-11-09T10:30:00Z"},
+        {"name": "실습 8", "due_at": None, "submission": {"workflow_state": "submitted"}},
         {"name": "날짜 있음", "due_at": "2026-11-07T10:30:00Z"},
     ]
-    out = from_canvas_undated(items, "피지컬미디어 (대면+사전녹화) (2150026201)", "https://canvas.ssu.ac.kr", now)
-    assert [(a["title"], a["submitted"], a["due"]) for a in out] == [("실습 9. I2C", False, None)]
+    course = "피지컬미디어 (대면+사전녹화) (2150026201)"
+    out = a.from_canvas_undated(items, course, "https://canvas.ssu.ac.kr", now)
+    assert [(x["title"], x["submitted"], x["due"]) for x in out] == [("실습 9. I2C", False, None)]
     assert out[0]["course"] == "피지컬미디어"
     assert out[0]["start"] == "2026-11-02T19:30"

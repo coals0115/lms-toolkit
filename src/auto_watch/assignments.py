@@ -52,8 +52,9 @@ def from_canvas_undated(
 ) -> list[Assignment]:
     """Canvas /courses/:id/assignments?bucket=undated 응답 → Assignment
 
-    planner 는 마감일 없는 과제를 안 준다. 교수가 마감을 수업 시간에만 말하는 과제(피지컬미디어 실습)를
-    놓치지 않게, 열린(unlock_at 이 지난) 것만 날짜 없이 넣는다.
+    planner 는 마감일 없는 과제를 안 준다.
+    교수가 마감을 수업 시간에만 말하는 과제(피지컬미디어 실습)를 놓치지 않게,
+    열린(unlock_at 이 지난) 것만 날짜 없이 넣는다.
     """
     out: list[Assignment] = []
     for item in items:
