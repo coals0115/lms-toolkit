@@ -1,5 +1,9 @@
 """transcription.py 다운로드 견고성 테스트"""
 
+import shutil
+import subprocess
+from typing import ClassVar
+
 import pytest
 import requests
 
@@ -34,6 +38,128 @@ class _FakeResp:
 @pytest.fixture
 def no_backoff(monkeypatch):
     monkeypatch.setattr(transcription, "DOWNLOAD_RETRY_BACKOFF_SEC", 0)
+
+
+@pytest.fixture(autouse=True)
+def no_range_server(monkeypatch):
+    """기본은 Range 를 모르는 서버 — 한 줄 다운로드 테스트가 실제 네트워크로 HEAD 를 보내지 않게"""
+
+    class _Head:
+        status_code = 405
+        headers: ClassVar[dict] = {}
+
+    monkeypatch.setattr(transcription.req_lib, "head", lambda url, **kw: _Head())
+
+
+class _RangeServer:
+    """bytes Range 를 받는 가짜 서버. fail_once 에 든 시작 위치의 첫 요청은 중간에 끊는다."""
+
+    def __init__(self, body: bytes, etag="v1", fail_once=(), ignore_range=False):
+        self.body = body
+        self.etag = etag
+        self.fail_once = set(fail_once)
+        self.ignore_range = ignore_range
+        self.ranges: list[str] = []
+
+    def head(self, url, **kw):
+        class _H:
+            status_code = 200
+            headers: ClassVar[dict] = {
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(self.body)),
+                "ETag": self.etag,
+            }
+
+        return _H()
+
+    def get(self, url, **kw):
+        rng = kw["headers"].get("Range")
+        self.ranges.append(rng)
+        if self.ignore_range or not rng:
+            return _FakeResp([self.body])
+        a, b = rng.removeprefix("bytes=").split("-")
+        start, end = int(a), int(b) if b else len(self.body) - 1
+        piece = self.body[start : end + 1]
+        half = [piece[: len(piece) // 2], piece[len(piece) // 2 :]]
+        if start in self.fail_once:
+            self.fail_once.discard(start)
+            return _FakeResp(half, fail_after=1, status=206)
+        return _FakeResp(half, status=206)
+
+
+@pytest.fixture
+def small_parallel(monkeypatch):
+    monkeypatch.setattr(transcription, "DOWNLOAD_PARALLEL_MIN_BYTES", 10)
+    monkeypatch.setattr(transcription, "DOWNLOAD_PARALLEL_MIN_SEGMENT", 10)
+    monkeypatch.setattr(transcription, "DOWNLOAD_PARALLEL_CONNECTIONS", 4)
+
+
+def _serve(monkeypatch, server):
+    monkeypatch.setattr(transcription.req_lib, "head", server.head)
+    monkeypatch.setattr(transcription.req_lib, "get", server.get)
+
+
+class TestDownloadParallel:
+    BODY = bytes(range(256)) * 4  # 1024 bytes
+
+    def test_splits_into_ranges_and_reassembles(self, tmp_path, monkeypatch, small_parallel):
+        server = _RangeServer(self.BODY)
+        _serve(monkeypatch, server)
+        part = tmp_path / "a.part.mp4"
+
+        assert transcription._download_mp4_parallel("http://x", part, "", "t") is True
+
+        assert part.read_bytes() == self.BODY
+        assert len(server.ranges) == 4
+        assert sorted(tmp_path.iterdir()) == [part]  # 구간 파일은 합친 뒤 지운다
+
+    def test_continues_after_existing_part(self, tmp_path, monkeypatch, small_parallel):
+        server = _RangeServer(self.BODY)
+        _serve(monkeypatch, server)
+        part = tmp_path / "a.part.mp4"
+        part.write_bytes(self.BODY[:300])
+
+        transcription._download_mp4_parallel("http://x", part, "", "t")
+
+        assert part.read_bytes() == self.BODY
+        assert min(int(r.removeprefix("bytes=").split("-")[0]) for r in server.ranges) == 300
+
+    def test_small_remainder_falls_back(self, tmp_path, monkeypatch):
+        server = _RangeServer(self.BODY)  # 기본 기준(32MB)보다 작다
+        _serve(monkeypatch, server)
+        assert (
+            transcription._download_mp4_parallel("http://x", tmp_path / "a.part.mp4", "", "t")
+            is False
+        )
+        assert server.ranges == []
+
+    def test_no_range_support_falls_back(self, tmp_path, small_parallel):
+        assert (
+            transcription._download_mp4_parallel("http://x", tmp_path / "a.part.mp4", "", "t")
+            is False
+        )
+
+    def test_changed_file_is_rejected(self, tmp_path, monkeypatch, small_parallel):
+        _serve(
+            monkeypatch, _RangeServer(self.BODY, ignore_range=True)
+        )  # If-Range 불일치 → 200 전체
+        with pytest.raises(OSError):
+            transcription._download_mp4_parallel("http://x", tmp_path / "a.part.mp4", "", "t")
+
+    async def test_failed_segment_resumes_on_retry(
+        self, tmp_path, monkeypatch, small_parallel, no_backoff
+    ):
+        server = _RangeServer(self.BODY, fail_once={256})
+        _serve(monkeypatch, server)
+        out = tmp_path / "a.mp4"
+
+        await transcription._download_with_retry("http://x", out, "t", "", hls=False)
+
+        assert out.read_bytes() == self.BODY
+        assert [p.name for p in tmp_path.iterdir()] == ["a.mp4"]
+        # 끊긴 구간(256-511)은 받은 128바이트 뒤부터, 나머지 구간은 다시 안 받는다
+        assert server.ranges.count("bytes=384-511") == 1
+        assert len(server.ranges) == 5
 
 
 class TestDownloadMp4:
@@ -179,3 +305,89 @@ class TestSkipExisting:
         assert result["txt"] == str(course / "강의.txt")
         assert result["skipped"] is False
         assert sorted(p.name for p in course.iterdir()) == ["강의.mp4", "강의.txt"]
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg 없음")
+class TestStoryParts:
+    @staticmethod
+    def _clip(path, sec):
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"sine=frequency=440:duration={sec}",
+                "-f",
+                "lavfi",
+                "-i",
+                f"color=size=64x64:duration={sec}",
+                "-shortest",
+                "-c:v",
+                "libx264",
+                "-c:a",
+                "aac",
+                str(path),
+            ],
+            check=True,
+        )
+
+    @staticmethod
+    def _duration(path):
+        out = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return float(out.stdout)
+
+    async def test_downloads_each_story_and_concats(self, tmp_path, monkeypatch):
+        src = {"http://x/1.mp4": tmp_path / "s1.mp4", "http://x/2.mp4": tmp_path / "s2.mp4"}
+        self._clip(src["http://x/1.mp4"], 1)
+        self._clip(src["http://x/2.mp4"], 2)
+        got = []
+
+        async def fake_retry(url, out, title, referer, hls):
+            got.append(url)
+            out.write_bytes(src[url].read_bytes())
+
+        monkeypatch.setattr(transcription, "_download_with_retry", fake_retry)
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        mp4 = out_dir / "lec.mp4"
+
+        await transcription._download_story_parts(list(src), mp4, "t", "")
+
+        assert got == list(src)
+        assert abs(self._duration(mp4) - 3) < 0.3
+        assert [p.name for p in out_dir.iterdir()] == ["lec.mp4"]
+
+    async def test_already_downloaded_story_is_not_refetched(self, tmp_path, monkeypatch):
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        self._clip(out_dir / "lec.story1.mp4", 1)
+        self._clip(tmp_path / "s2.mp4", 1)
+        got = []
+
+        async def fake_retry(url, out, title, referer, hls):
+            got.append(url)
+            out.write_bytes((tmp_path / "s2.mp4").read_bytes())
+
+        monkeypatch.setattr(transcription, "_download_with_retry", fake_retry)
+        await transcription._download_story_parts(
+            ["http://x/1", "http://x/2"], out_dir / "lec.mp4", "t", ""
+        )
+        assert got == ["http://x/2"]

@@ -100,3 +100,8 @@ DOWNLOAD_REPORT_INTERVAL = 50 * 1024 * 1024
 DOWNLOAD_TIMEOUT = (10, 60)  # (연결, 무응답) 초
 DOWNLOAD_MAX_ATTEMPTS = 3
 DOWNLOAD_RETRY_BACKOFF_SEC = 5  # 시도마다 두 배
+# commons CDN 은 연결 하나로 받다 보면 분당 3MB 수준으로 느려진다(2026-11-15 LCD 40분 영상 실측).
+# 남은 양이 크면 Range 로 쪼개 동시에 받는다. 16개로 남은 59MB 를 80초에 받았다.
+DOWNLOAD_PARALLEL_CONNECTIONS = 16
+DOWNLOAD_PARALLEL_MIN_BYTES = 32 * 1024 * 1024  # 이보다 적게 남으면 한 줄로 받는다
+DOWNLOAD_PARALLEL_MIN_SEGMENT = 4 * 1024 * 1024

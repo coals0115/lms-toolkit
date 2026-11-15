@@ -20,7 +20,13 @@ from ..config import (
 from ..exceptions import BrowserError, LoginError
 from ..transcription import download_and_transcribe
 from ..types import Assignment, Course, Lecture, Notice, ProcessResult, TranscriptResult
-from ..util import PlaybackWatchdog, RequestUrlCapture, format_duration
+from ..util import (
+    PlaybackWatchdog,
+    RequestUrlCapture,
+    commons_content_id,
+    format_duration,
+    parse_story_media,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -610,6 +616,21 @@ class SSUProvider:
 
             await asyncio.sleep(5)
 
+    async def _story_media_urls(self, commons: Frame, video_url: str) -> list[str]:
+        """강의가 영상 여러 개(story)로 나뉘어 있으면 전부, 아니면 [video_url]"""
+        content_id = commons_content_id(video_url)
+        if not content_id:
+            return [video_url]
+        try:
+            xml = await commons.evaluate(
+                "async (u) => (await fetch(u, {credentials: 'include'})).text()",
+                f"/viewer/ssplayer/uniplayer_support/content.php?content_id={content_id}",
+            )
+        except Exception as e:
+            logger.warning("영상 목록(content.php)을 못 읽음 — 잡은 영상 하나만 받음: %s", e)
+            return [video_url]
+        return parse_story_media(xml, video_url)
+
     async def process_lecture(
         self, page: Page, lecture: Lecture, *, defer_transcript: bool = False
     ) -> ProcessResult:
@@ -654,12 +675,18 @@ class SSUProvider:
         transcript_task = None
         if video_url:
             logger.info("영상 URL 캡처 완료")
+            story_urls = await self._story_media_urls(commons, video_url)
+            if len(story_urls) > 1:
+                logger.info(
+                    "이 강의는 영상 %d개로 나뉘어 있음 — 전부 받아 이어 붙임", len(story_urls)
+                )
             transcript_task = asyncio.create_task(
                 download_and_transcribe(
                     video_url,
                     course_name,
                     title,
                     referer="https://commons.ssu.ac.kr/",
+                    story_urls=story_urls,
                 )
             )
         else:

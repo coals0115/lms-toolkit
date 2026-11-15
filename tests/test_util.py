@@ -1,6 +1,6 @@
 """util.py 단위 테스트"""
 
-from src.auto_watch.util import format_duration
+from src.auto_watch.util import commons_content_id, format_duration, parse_story_media
 
 
 class TestFormatDuration:
@@ -81,3 +81,32 @@ class TestRequestUrlCapture:
         page.emit("request", _Req("http://x/a.mp4"))
         page.emit("framenavigated", page.main_frame)  # SPA history 이동
         assert cap.url == "http://x/a.mp4"
+
+
+_BASE = "https://ssu-toast.commonscdn.com/contents28/ssu1000001/5ec8e2868a882/contents/media_files/"
+_XML = """<?xml version="1.0"?><content><content_playing_info><story_list>
+<story id="(a)"><main_media_list>
+<main_media media_id="basic_(a)">main_(a).mp4</main_media></main_media_list></story>
+<story id="(b)"><main_media_list><main_media media_id="basic_(b)">main_(b).mp4</main_media>
+<main_media media_id="hd_(b)">hd_(b).mp4</main_media></main_media_list></story>
+</story_list></content_playing_info></content>"""
+
+
+class TestStoryMedia:
+    def test_content_id(self):
+        assert commons_content_id(_BASE + "main_(a).mp4") == "5ec8e2868a882"
+        assert commons_content_id("https://example.com/x.mp4") is None
+
+    def test_multi_story_returns_all_in_order(self):
+        assert parse_story_media(_XML, _BASE + "main_(a).mp4") == [
+            _BASE + "main_(a).mp4",
+            _BASE + "main_(b).mp4",
+        ]
+
+    def test_single_story_keeps_captured(self):
+        xml = _XML.split('<story id="(b)">')[0] + "</story_list></content_playing_info></content>"
+        assert parse_story_media(xml, _BASE + "main_(a).mp4") == [_BASE + "main_(a).mp4"]
+
+    def test_bad_xml_or_unknown_file_keeps_captured(self):
+        assert parse_story_media("<html>404", _BASE + "main_(a).mp4") == [_BASE + "main_(a).mp4"]
+        assert parse_story_media(_XML, _BASE + "main_(z).mp4") == [_BASE + "main_(z).mp4"]

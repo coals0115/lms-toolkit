@@ -1,6 +1,8 @@
 """범용 헬퍼"""
 
 import asyncio
+import re
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -108,3 +110,52 @@ class RequestUrlCapture:
     def close(self) -> None:
         self._page.remove_listener("framenavigated", self._on_navigated)
         self._page.remove_listener("request", self._on_request)
+
+
+_COMMONS_MEDIA_RE = re.compile(r"/contents\d*/[^/]+/([0-9a-f]+)/contents/media_files/([^/?#]+)")
+
+
+def commons_content_id(video_url: str) -> str | None:
+    """commons 영상 URL 에서 content_id 를 뽑는다.
+
+    예: .../ssu1000001/5ec8e2868a882/contents/media_files/main_(..).mp4 → 5ec8e2868a882
+    """
+    m = _COMMONS_MEDIA_RE.search(video_url)
+    return m.group(1) if m else None
+
+
+def parse_story_media(content_xml: str, captured_url: str) -> list[str]:
+    """commons content.php 응답에서 이 강의를 이루는 영상 파일 URL 을 재생 순서대로 뽑는다.
+
+    readystream(upf) 강의는 영상이 story 여러 개로 나뉘어 있고, 플레이어는 첫 story 의 mp4 만
+    먼저 부른다. 그래서 재생 중 잡은 URL 하나만 받으면 앞부분만 남는다
+    (2026-11-15 DRAM원리: 27분 중 4분).
+    목록을 못 읽거나 잡은 파일이 목록에 없으면 [captured_url] 그대로 돌려준다.
+    """
+    m = _COMMONS_MEDIA_RE.search(captured_url)
+    if not m:
+        return [captured_url]
+    try:
+        root = ET.fromstring(content_xml)
+    except ET.ParseError:
+        return [captured_url]
+    files = [
+        mm.text.strip()
+        for story in root.iter("story")
+        for mm in story.iter("main_media")
+        if mm.text and mm.text.strip()
+    ]
+    # 같은 story 에 화질별 main_media 가 여럿이면 story 당 첫 것만 쓴다
+    files = [
+        next(
+            (mm.text.strip() for mm in story.iter("main_media") if mm.text and mm.text.strip()),
+            None,
+        )
+        for story in root.iter("story")
+    ]
+    files = [f for f in files if f]
+    captured_file = m.group(2)
+    if len(files) < 2 or captured_file not in files:
+        return [captured_url]
+    base = captured_url[: captured_url.rindex(captured_file)]
+    return [base + f for f in files]
